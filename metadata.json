@@ -1,0 +1,7 @@
+{
+  "name": "Примерочная - AI Fashion Studio",
+  "description": "A high-end AI-powered fashion platform for creating digital twins, virtual fitting, and social shopping using Gemini and Google Veo.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

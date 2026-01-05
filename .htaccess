@@ -1,0 +1,51 @@
+# ==============================================================================
+# Vite SPA - Обслуживание из папки dist/
+# ==============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    
+    # Блокируем доступ к исходным файлам TypeScript/TSX
+    RewriteCond %{REQUEST_URI} \.(tsx?|ts)$
+    RewriteRule .* - [F,L]
+    
+    # Если запрашивается существующий файл в dist/, возвращаем его
+    RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -f
+    RewriteRule ^(.*)$ /dist/$1 [L]
+    
+    # Если запрашивается существующий каталог в dist/, возвращаем его
+    RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -d
+    RewriteRule ^(.*)$ /dist/$1 [L]
+    
+    # Все остальные запросы -> dist/index.html (SPA fallback)
+    RewriteCond %{REQUEST_URI} !^/dist/
+    RewriteRule ^.*$ /dist/index.html [L]
+</IfModule>
+
+# ==============================================================================
+# MIME Types
+# ==============================================================================
+<IfModule mod_mime.c>
+    AddType application/javascript .js .mjs
+    AddType text/css .css
+    AddType application/json .json
+    AddType image/svg+xml .svg .svgz
+    AddType image/webp .webp
+    AddType font/woff .woff
+    AddType font/woff2 .woff2
+    AddType font/ttf .ttf
+    AddType font/otf .otf
+</IfModule>
+
+# ==============================================================================
+# Кеширование
+# ==============================================================================
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>
