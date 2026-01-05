@@ -30,3 +30,23 @@
    ```bash
    npm run build
    ```
+
+## Работа с Git (Обновление)
+
+Этот проект является частью репозитория: `https://github.com/brainwarcom/fittingroom.git`
+Ветка для Frontend: `front`
+
+**Как отправить обновления:**
+
+1. Добавьте изменения:
+   ```bash
+   git add .
+   ```
+2. Создайте коммит:
+   ```bash
+   git commit -m "Описание изменений"
+   ```
+3. Отправьте в ветку `front`:
+   ```bash
+   git push origin front
+   ```
