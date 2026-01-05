@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Fitting Room - AI Fashion Studio
 
-# Run and deploy your AI Studio app
+Интерактивная виртуальная примерочная на базе искусственного интеллекта. Позволяет пользователям примерять одежду на свои фотографии или цифровых аватаров, создавая реалистичные образы.
 
-This contains everything you need to run your app locally.
+## Особенности
 
-View your app in AI Studio: https://ai.studio/apps/drive/1aZO8FXnm04-GorYC08S9OoZF5fysY-Mp
+- **Виртуальная примерка**: Загрузите свое фото или выберите аватара, добавьте одежду и получите готовый образ за считанные секунды.
+- **Гардероб**: Удобное управление коллекцией одежды.
+- **Лента образов**: Вдохновляйтесь образами от других пользователей.
+- **Интеграция с Laravel**: Полная синхронизация с админ-панелью для управления контентом и пользователями.
 
-## Run Locally
+## Технологии
 
-**Prerequisites:**  Node.js
+- **Frontend**: React, Vite, Tailwind CSS
+- **API**: Интеграция с Laravel Backend (Sanctum Auth)
 
+## Запуск проекта
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Установите зависимости:
+   ```bash
+   npm install
+   ```
+
+2. Запустите режим разработки:
+   ```bash
+   npm run dev
+   ```
+
+3. Для сборки продакшн версии:
+   ```bash
+   npm run build
+   ```
