@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\DigitalTwinController;
 use App\Http\Controllers\Api\WardrobeController;
 use App\Http\Controllers\Api\MigrationController;
+use App\Http\Controllers\Api\GenerationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,4 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Data Migration
     Route::post('/migrate-local-data', [MigrationController::class, 'migrateLocalData']);
+
+    // AI Generation
+    Route::post('/generate', [GenerationController::class, 'generate']);
 });

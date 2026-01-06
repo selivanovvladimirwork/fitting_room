@@ -10,6 +10,8 @@ class ApiDocumentation extends Page
     
     protected static ?string $navigationLabel = 'Документация';
     
+    protected static ?string $navigationGroup = 'Настройки';
+    
     protected static ?string $title = 'API Документация';
     
     protected static ?int $navigationSort = 101;

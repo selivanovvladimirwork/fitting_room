@@ -33,6 +33,11 @@ class UserResource extends Resource
                     ->label('Имя')
                     ->required()
                     ->maxLength(255),
+                Forms\Components\TextInput::make('nickname')
+                    ->label('Никнейм')
+                    ->unique(ignoreRecord: true)
+                    ->regex('/^[a-zA-Z0-9_]+$/')
+                    ->maxLength(50),
                 Forms\Components\TextInput::make('email')
                     ->label('Email')
                     ->email()
@@ -54,6 +59,10 @@ class UserResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('nickname')
+                    ->label('Никнейм')
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('email_verified_at')
@@ -84,7 +93,7 @@ class UserResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\DigitalTwinsRelationManager::class,
         ];
     }
 

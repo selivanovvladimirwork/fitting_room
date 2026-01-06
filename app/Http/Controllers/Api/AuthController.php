@@ -18,12 +18,17 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'nickname' => 'required|string|max:50|unique:users|regex:/^[a-zA-Z0-9_]+$/',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
+        ], [
+            'nickname.regex' => 'Никнейм может содержать только латинские буквы, цифры и подчёркивание',
+            'nickname.unique' => 'Этот никнейм уже занят',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
+            'nickname' => $validated['nickname'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
         ]);
@@ -34,6 +39,7 @@ class AuthController extends Controller
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
+                'nickname' => $user->nickname,
                 'email' => $user->email,
             ],
             'token' => $token,
@@ -64,6 +70,7 @@ class AuthController extends Controller
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
+                'nickname' => $user->nickname,
                 'email' => $user->email,
             ],
             'token' => $token,
@@ -90,6 +97,7 @@ class AuthController extends Controller
         return response()->json([
             'id' => $user->id,
             'name' => $user->name,
+            'nickname' => $user->nickname,
             'email' => $user->email,
         ]);
     }

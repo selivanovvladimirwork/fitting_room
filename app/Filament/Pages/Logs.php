@@ -11,6 +11,8 @@ class Logs extends Page
     
     protected static ?string $navigationLabel = 'Логи';
     
+    protected static ?string $navigationGroup = 'Настройки';
+    
     protected static ?string $title = 'Логи';
     
     protected static ?int $navigationSort = 100;
