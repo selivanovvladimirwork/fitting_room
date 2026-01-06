@@ -50,7 +50,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="w-full py-12 px-2 md:px-4 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+    <div className="w-full pb-12 pt-16 px-2 md:px-4 animate-in fade-in slide-in-from-bottom-8 duration-1000">
       {/* Header */}
       <div className="flex items-center gap-6 mb-16 px-4">
         <button

@@ -26,7 +26,7 @@ interface AvatarViewProps {
 import { useAuth } from '../context/AuthContext';
 
 const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavigateToFittingRoom, onSelectPost, onFitPost, onLogout, onNavigateToProfile, avatars, activeAvatarId, onAddAvatar, onUpdateAvatar, onDeleteAvatar, onSetActiveAvatar, collections, onOpenCreateCollection, onDeleteCollection, onSavePost }) => {
-  const { requireAuth } = useAuth();
+  const { requireAuth, user } = useAuth();
   const [activeSection, setActiveSection] = useState<'profile' | 'settings' | 'edit_avatar'>('profile');
   const [activeTab, setActiveTab] = useState<'groups' | 'following' | 'saved' | 'liked' | 'my_posts'>('my_posts');
   const [viewCollection, setViewCollection] = useState<string | null>(null);
@@ -59,13 +59,15 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
   const currentAvatar = activeAvatar && activeAvatar.referenceImages.length > 0 ? activeAvatar.referenceImages[0] : '/mock/mock_avatar_full_001.jpg';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 pb-20">
+    <div className="max-w-7xl mx-auto px-4 pb-20 pt-16">
 
       {/* Profile Header Block */}
       <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-12 gap-8">
         <div className="flex items-end gap-6">
           <div className="mb-2">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase mb-1">@ION_USER</h1>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase mb-1">
+              @{user?.nickname || user?.name || 'USER'}
+            </h1>
           </div>
         </div>
 

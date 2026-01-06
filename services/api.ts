@@ -49,11 +49,11 @@ export const authApi = {
         return data;
     },
 
-    async register(name: string, email: string, password: string, password_confirmation: string) {
+    async register(name: string, nickname: string, email: string, password: string, password_confirmation: string) {
         const response = await fetch(`${API_BASE}/register`, {
             method: 'POST',
             headers: getHeaders(),
-            body: JSON.stringify({ name, email, password, password_confirmation }),
+            body: JSON.stringify({ name, nickname, email, password, password_confirmation }),
         });
         const data = await handleResponse<{ user: any; token: string }>(response);
         localStorage.setItem('auth_token', data.token);
@@ -75,7 +75,7 @@ export const authApi = {
         const response = await fetch(`${API_BASE}/user`, {
             headers: getHeaders(true),
         });
-        return handleResponse<{ id: number; name: string; email: string }>(response);
+        return handleResponse<{ id: number; name: string; nickname: string; email: string }>(response);
     },
 
     isAuthenticated(): boolean {
@@ -174,6 +174,18 @@ export const wardrobeApi = {
     },
 };
 
+// ==================== Generation API ====================
+export const generationApi = {
+    async generateImage(data: { model: string; messages: any[] }) {
+        const response = await fetch(`${API_BASE}/generate`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify(data),
+        });
+        return handleResponse<any>(response);
+    },
+};
+
 // ==================== Migration API ====================
 export const migrationApi = {
     async migrateLocalData(data: { avatars?: any[]; wardrobe?: any[]; collections?: any[] }) {
@@ -227,5 +239,6 @@ export default {
     avatars: avatarsApi,
     wardrobe: wardrobeApi,
     migration: migrationApi,
+    generation: generationApi,
     migrateLocalStorageToApi,
 };

@@ -26,7 +26,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ username, onBack, onS
   ], [username]);
 
   return (
-    <div className="w-full py-8 md:py-12 px-1 md:px-6 max-w-7xl mx-auto animate-in fade-in duration-1000">
+    <div className="w-full pb-12 pt-16 px-1 md:px-6 max-w-7xl mx-auto animate-in fade-in duration-1000">
       <div className="flex flex-col md:flex-row items-center gap-6 md:gap-10 mb-12 md:mb-20 px-4">
         <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto">
           <button

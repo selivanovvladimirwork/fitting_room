@@ -1,30 +1,42 @@
 
 import React, { useState } from 'react';
 
+import { useAuth } from '../context/AuthContext';
+
 interface SettingsViewProps {
   onBack: () => void;
   embedded?: boolean;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false }) => {
+  const { user } = useAuth();
+
   const [formData, setFormData] = useState({
-    fullName: 'Александр Волков',
-    nickname: 'alex_v',
-    email: 'alex.volkov@icloud.com',
-    phone: '+7 (999) 000-00-00',
-    apiKey: localStorage.getItem('gemini_api_key') || ''
+    fullName: user?.name || '',
+    nickname: user?.nickname || '',
+    email: user?.email || '',
+    phone: '',
   });
+
+  // Update form data when user loads
+  React.useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        fullName: user.name,
+        nickname: user.nickname,
+        email: user.email
+      }));
+    }
+  }, [user]);
 
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = () => {
     setIsSaving(true);
-    // Save API Key to LocalStorage
-    if (formData.apiKey) {
-      localStorage.setItem('gemini_api_key', formData.apiKey);
-    } else {
-      localStorage.removeItem('gemini_api_key');
-    }
+    setIsSaving(true);
+
+    // Simulate saving settings (backend connection would be here)
 
     setTimeout(() => {
       setIsSaving(false);
@@ -33,7 +45,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
   };
 
   return (
-    <div className={`w-full py-12 px-2 md:px-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 ${embedded ? 'py-0 px-0 md:px-0' : ''}`}>
+    <div className={`w-full pb-12 pt-16 px-2 md:px-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 ${embedded ? 'py-0 px-0 md:px-0' : ''}`}>
       {/* Header with Back button - only show if not embedded */}
       {!embedded && (
         <div className="flex items-center gap-6 mb-16 px-4">
@@ -52,20 +64,20 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
       <div className="liquid-glass rounded-[40px] md:rounded-[60px] p-8 md:p-24 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.1)] border border-white">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-12">
 
-          {/* Full Name */}
-          <div className="space-y-4">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">ФИО</label>
+          {/* Name */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Имя</label>
             <input
               type="text"
               value={formData.fullName}
               onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm"
+              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
               placeholder="Введите ваше имя"
             />
           </div>
 
           {/* Nickname */}
-          <div className="space-y-4">
+          <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Никнейм</label>
             <div className="relative">
               <span className="absolute left-8 md:left-10 top-1/2 -translate-y-1/2 text-gray-400 text-lg md:text-xl">@</span>
@@ -73,55 +85,37 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
                 type="text"
                 value={formData.nickname}
                 onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
-                className="w-full pl-14 md:pl-16 pr-8 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm"
+                className="w-full pl-14 md:pl-16 pr-8 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
                 placeholder="ник"
               />
             </div>
           </div>
 
           {/* Email */}
-          <div className="space-y-4">
+          <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">E-mail</label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm"
+              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
               placeholder="example@mail.com"
             />
           </div>
 
           {/* Phone */}
-          <div className="space-y-4">
+          <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Телефон</label>
             <input
               type="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm"
+              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
               placeholder="+7 (000) 000-00-00"
             />
           </div>
 
-          {/* AI Configuration Section */}
-          <div className="md:col-span-2 mt-8 pt-8 border-t border-white/50">
-            <h3 className="text-xl font-thin mb-8">Конфигурация AI</h3>
-            <div className="space-y-4">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Google Gemini API Key</label>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={formData.apiKey}
-                  onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm font-mono text-sm"
-                  placeholder="sk-..."
-                />
-                <p className="ml-6 mt-3 text-xs text-gray-400 max-w-2xl leading-relaxed">
-                  Ключ сохраняется только в вашем браузере (LocalStorage) и используется для генерации изображений через Google Gemini API.
-                </p>
-              </div>
-            </div>
-          </div>
+
         </div>
 
         {/* Save Button */}

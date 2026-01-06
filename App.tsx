@@ -15,66 +15,110 @@ import UserProfileView from './views/UserProfileView';
 import AuthModal from './components/AuthModal';
 import Notification from './components/Notification';
 import { useAuth } from './context/AuthContext';
+import { avatarsApi, wardrobeApi } from './services/api';
 
 const App: React.FC = () => {
-  const { requireAuth, logout } = useAuth();
+  const { requireAuth, logout, user, isAuthenticated, isNewUser } = useAuth();
   const [currentView, setCurrentView] = useState<View>(View.FEED); // Default to Search
+
+  // Redirect new users to Avatar Settings
+  useEffect(() => {
+    if (isAuthenticated && isNewUser) {
+      setCurrentView(View.AVATAR_SETTINGS);
+    }
+  }, [isAuthenticated, isNewUser]);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [currentPostList, setCurrentPostList] = useState<Post[]>([]);
   const [activeProfileUser, setActiveProfileUser] = useState<string | null>(null);
   const [fittingPost, setFittingPost] = useState<Post | null>(null);
 
-  // Manage multiple avatars
-  const [avatars, setAvatars] = useState<DigitalTwin[]>(() => {
-    const savedV2 = localStorage.getItem('user_avatars_v2');
-    if (savedV2) {
-      return JSON.parse(savedV2);
-    }
-    // Migration from v1
-    const savedV1 = localStorage.getItem('user_avatars');
-    if (savedV1) {
-      const oldImages = JSON.parse(savedV1);
-      if (oldImages.length > 0) {
-        return [{
-          id: 'default-avatar',
-          name: 'Мой аватар',
-          referenceImages: oldImages,
-          stats: { height: 175, weight: 70, chest: 90, waist: 70, hips: 95 } // Defaults
-        }];
-      }
-    }
-    return [];
-  });
+  // Manage multiple avatars - теперь с поддержкой API
+  const [avatars, setAvatars] = useState<DigitalTwin[]>([]);
+  const [avatarsLoaded, setAvatarsLoaded] = useState(false);
 
   const [activeAvatarId, setActiveAvatarId] = useState<string | null>(() => {
     const saved = localStorage.getItem('active_avatar_id');
-    return saved || (avatars.length > 0 ? avatars[0].id : null);
+    return saved || null;
   });
 
+  // Загрузка аватаров из API при авторизации
   useEffect(() => {
-    localStorage.setItem('user_avatars_v2', JSON.stringify(avatars));
-    if (avatars.length > 0 && !activeAvatarId) {
-      setActiveAvatarId(avatars[0].id);
-    }
-  }, [avatars, activeAvatarId]);
+    const loadAvatars = async () => {
+      if (isAuthenticated) {
+        try {
+          const apiAvatars = await avatarsApi.getAll();
+          setAvatars(apiAvatars);
+          if (apiAvatars.length > 0 && !activeAvatarId) {
+            setActiveAvatarId(apiAvatars[0].id);
+          }
+        } catch (error) {
+          console.error('Failed to load avatars from API:', error);
+          // Fallback to localStorage
+          const savedV2 = localStorage.getItem('user_avatars_v2');
+          if (savedV2) setAvatars(JSON.parse(savedV2));
+        }
+      } else {
+        // Для неавторизованных - localStorage
+        const savedV2 = localStorage.getItem('user_avatars_v2');
+        if (savedV2) setAvatars(JSON.parse(savedV2));
+      }
+      setAvatarsLoaded(true);
+    };
+    loadAvatars();
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (activeAvatarId) localStorage.setItem('active_avatar_id', activeAvatarId);
   }, [activeAvatarId]);
 
-  const handleAddAvatar = (avatar: DigitalTwin) => {
+  const handleAddAvatar = async (avatar: DigitalTwin) => {
     setAvatars(prev => [...prev, avatar]);
     if (!activeAvatarId) setActiveAvatarId(avatar.id);
+
+    // Сохраняем в API если авторизован и есть хотя бы одно изображение
+    const validImages = avatar.referenceImages.filter(img => img && img.trim() !== '');
+    if (isAuthenticated && validImages.length > 0) {
+      try {
+        await avatarsApi.create({
+          name: avatar.name,
+          referenceImages: validImages,
+          stats: avatar.stats
+        });
+      } catch (error) {
+        console.error('Failed to save avatar to API:', error);
+      }
+    }
   };
 
-  const handleUpdateAvatar = (id: string, updates: Partial<DigitalTwin>) => {
+  const handleUpdateAvatar = async (id: string, updates: Partial<DigitalTwin>) => {
     setAvatars(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+
+    if (isAuthenticated) {
+      try {
+        // Фильтруем пустые изображения если обновляем referenceImages
+        const apiUpdates = { ...updates };
+        if (apiUpdates.referenceImages) {
+          apiUpdates.referenceImages = apiUpdates.referenceImages.filter(img => img && img.trim() !== '');
+        }
+        await avatarsApi.update(id, apiUpdates);
+      } catch (error) {
+        console.error('Failed to update avatar in API:', error);
+      }
+    }
   };
 
-  const handleDeleteAvatar = (id: string) => {
+  const handleDeleteAvatar = async (id: string) => {
     setAvatars(prev => prev.filter(a => a.id !== id));
     if (activeAvatarId === id) {
       setActiveAvatarId(null);
+    }
+
+    if (isAuthenticated) {
+      try {
+        await avatarsApi.delete(id);
+      } catch (error) {
+        console.error('Failed to delete avatar from API:', error);
+      }
     }
   };
 
@@ -139,15 +183,18 @@ const App: React.FC = () => {
 
   const [notification, setNotification] = useState<{ message: string; actionLabel?: string; onAction?: () => void } | null>(null);
 
-  const handleFitAction = (post: Post) => {
-    requireAuth(() => {
-      // 1. Add to persistent wardrobe
-      const savedWardrobe = localStorage.getItem('fitting_room_wardrobe');
-      const wardrobe: Post[] = savedWardrobe ? JSON.parse(savedWardrobe) : [];
-
-      if (!wardrobe.some(p => p.id === post.id)) {
-        const newWardrobe = [post, ...wardrobe];
-        localStorage.setItem('fitting_room_wardrobe', JSON.stringify(newWardrobe));
+  const handleFitAction = async (post: Post) => {
+    requireAuth(async () => {
+      // 1. Add to API wardrobe if authenticated
+      if (isAuthenticated) {
+        try {
+          await wardrobeApi.add({
+            image_url: post.imageUrl,
+            title: post.author,
+          });
+        } catch (error) {
+          console.error('Failed to add to API wardrobe:', error);
+        }
       }
 
       setFittingPost(post);

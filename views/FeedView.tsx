@@ -55,7 +55,7 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
   }, [searchQuery, allPosts]);
 
   return (
-    <div className="py-8 w-full px-1 md:px-6 max-w-7xl mx-auto animate-in fade-in duration-1000">
+    <div className="pb-8 pt-16 w-full px-1 md:px-6 max-w-7xl mx-auto animate-in fade-in duration-1000">
       <div className="flex flex-col items-center mb-12 md:mb-16 px-4">
         <h2 className="text-4xl md:text-7xl font-thin tracking-tight mb-8 md:mb-10 text-center uppercase tracking-[0.1em] !drop-shadow-none !text-shadow-[0_4px_12px_rgba(0,0,0,0.15)]">Поиск стиля</h2>
 

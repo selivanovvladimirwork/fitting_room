@@ -158,7 +158,7 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
   };
 
   return (
-    <div className="flex flex-col w-full px-1 md:px-6 max-w-7xl mx-auto">
+    <div className="flex flex-col w-full px-1 md:px-6 max-w-7xl mx-auto pt-16">
       {/* 1. Profile Header */}
       <div className="mb-12 mt-4 animate-in fade-in slide-in-from-top-4 duration-700">
         {isAuthenticated ? (

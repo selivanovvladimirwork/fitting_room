@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Scenario, Post, DigitalTwin } from '../types';
 import PostCard from '../components/PostCard';
+import api from '../services/api';
 
 interface VirtualFitViewProps {
   initialPost?: Post | null;
@@ -265,22 +266,6 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
 
     if (!activeCloth) return;
 
-    // Получаем ключ из настроек или окружения
-    const customKey = localStorage.getItem('gemini_api_key');
-    const apiKey = customKey || process.env.API_KEY;
-
-    if (!apiKey) {
-      setErrorMessage("API Key не найден. Укажите его в настройках.");
-      setIsGenerating(false);
-      return;
-    }
-
-    // @ts-ignore
-    const hasKey = customKey ? true : await window.aistudio?.hasSelectedApiKey();
-    if (!hasKey && !customKey) {
-      await handleSelectKey();
-    }
-
     // @ts-ignore
     setSelectedScenario(scenario === 'STUDIO_DEFAULT' ? null : scenario);
     setIsGenerating(true);
@@ -293,8 +278,6 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       : scenario;
 
     try {
-      // OpenRouter API Call (OpenAI Compatible)
-      // OpenRouter API Call (OpenAI Compatible)
       const messagesContent: any[] = [];
 
       // 0. DEBUG: Verify Input Images
@@ -375,32 +358,16 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       const messages = [{ role: "user", content: messagesContent }];
       console.log("[DEBUG] Final Messages Structure:", messagesContent.map(m => m.type));
 
-
-
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "HTTP-Referer": window.location.origin, // Required by OpenRouter
-          "X-Title": "AI Fitting Room", // Optional
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: messages,
-          modalities: ["image", "text"]
-        })
+      // Call Backend API
+      const data = await api.generation.generateImage({
+        model: "google/gemini-2.5-flash-image",
+        messages: messages
       });
 
-      if (!response.ok) {
-        throw new Error(`OpenRouter API Error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log("Full OpenRouter Data:", data); // Requested debug log
+      console.log("Backend Response Data:", data);
       const message = data.choices?.[0]?.message;
 
-      console.log("OpenRouter Message Content:", message);
+      console.log("Message Content:", message);
       const finishReason = data.choices?.[0]?.native_finish_reason || data.choices?.[0]?.finish_reason;
 
       // Check for native image response structure
@@ -428,11 +395,6 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         } else {
           console.warn("Model returned text:", content);
           setResultUrl(`https://picsum.photos/seed/${scenario}-${Date.now()}/1024/1792`);
-          // Even if we use a fallback seed, we arguably might want to advance if we consider this a 'result'
-          // But usually this path means something went weird. 
-          // Let's safe-guard it and NOT advance here if it's just a text fallback that might be an error description.
-          // Yet the code sets a resultUrl.
-          // Let's add it here too for consistency with the fallback behavior.
           setIsBaseGenerated(true);
         }
       } else {
@@ -440,16 +402,14 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       }
 
     } catch (error: any) {
+      console.error("Generation Error:", error);
       const errStr = JSON.stringify(error);
-      if (errStr.includes("limit: 0") || errStr.includes("429")) {
-        setShowKeyHint(true);
-      }
-      setErrorMessage("Ошибка генерации. Проверьте лимиты API.");
-      // Фолбек для красоты
-      setTimeout(() => {
-        setResultUrl(`https://picsum.photos/seed/${scenario}/1920/1080`);
-        setIsBaseGenerated(true);
-      }, 1000);
+      setErrorMessage("Ошибка генерации. " + (error.message || "Попробуйте позже."));
+      // Fallback for demo purposes if backend fails repeatedly or network issue
+      // setTimeout(() => {
+      //   setResultUrl(`https://picsum.photos/seed/${scenario}/1920/1080`);
+      //   setIsBaseGenerated(true);
+      // }, 1000);
     } finally {
       setIsGenerating(false);
     }

@@ -4,6 +4,7 @@ import { authApi, migrateLocalStorageToApi } from '../services/api';
 interface User {
     id: number;
     name: string;
+    nickname: string;
     email: string;
 }
 
@@ -11,8 +12,10 @@ interface AuthContextType {
     isAuthenticated: boolean;
     user: User | null;
     isLoading: boolean;
+    isNewUser: boolean;
+    completeOnboarding: () => void;
     login: (email: string, password: string) => Promise<void>;
-    register: (name: string, email: string, password: string, passwordConfirmation: string) => Promise<void>;
+    register: (name: string, nickname: string, email: string, password: string, passwordConfirmation: string) => Promise<void>;
     logout: () => Promise<void>;
     isAuthModalOpen: boolean;
     openAuthModal: () => void;
@@ -27,6 +30,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isNewUser, setIsNewUser] = useState(false);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
     const [pendingCallback, setPendingCallback] = useState<(() => void) | null>(null);
@@ -40,15 +44,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 try {
                     const userData = await authApi.getUser();
                     setUser(userData);
-                } catch {
-                    // Token invalid, clear it
-                    localStorage.removeItem('auth_token');
+                } catch (error: any) {
+                    console.error('Auth verification failed:', error);
+                    // Only clear token if it's an authentication error (401)
+                    if (error.message && (error.message.includes('Unauthenticated') || error.message.includes('401'))) {
+                        localStorage.removeItem('auth_token');
+                    }
                 }
             }
             setIsLoading(false);
         };
         checkAuth();
     }, []);
+
+    // Execute pending callback after loading completes if authenticated
+    useEffect(() => {
+        if (!isLoading && pendingCallback) {
+            if (isAuthenticated) {
+                pendingCallback();
+                setPendingCallback(null);
+            } else if (!isAuthModalOpen) {
+                // Not authenticated and modal not open - open it
+                setIsAuthModalOpen(true);
+            }
+        }
+    }, [isLoading, isAuthenticated, pendingCallback, isAuthModalOpen]);
 
     const login = useCallback(async (email: string, password: string) => {
         setAuthError(null);
@@ -71,11 +91,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [pendingCallback]);
 
-    const register = useCallback(async (name: string, email: string, password: string, passwordConfirmation: string) => {
+    const register = useCallback(async (name: string, nickname: string, email: string, password: string, passwordConfirmation: string) => {
         setAuthError(null);
         try {
-            const { user: userData } = await authApi.register(name, email, password, passwordConfirmation);
+            const { user: userData } = await authApi.register(name, nickname, email, password, passwordConfirmation);
             setUser(userData);
+            setIsNewUser(true);
             setIsAuthModalOpen(false);
 
             // Execute pending callback if any
@@ -106,19 +127,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const clearAuthError = useCallback(() => setAuthError(null), []);
 
     const requireAuth = useCallback((callback: () => void) => {
+        // Если загружается - сохраняем callback и ждём
+        if (isLoading) {
+            setPendingCallback(() => callback);
+            return;
+        }
+
         if (isAuthenticated) {
             callback();
         } else {
             setPendingCallback(() => callback);
             openAuthModal();
         }
-    }, [isAuthenticated, openAuthModal]);
+    }, [isAuthenticated, isLoading, openAuthModal]);
 
     return (
         <AuthContext.Provider value={{
             isAuthenticated,
             user,
             isLoading,
+            isNewUser,
+            completeOnboarding: () => setIsNewUser(false),
             login,
             register,
             logout,
