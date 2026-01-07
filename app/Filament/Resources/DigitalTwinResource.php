@@ -25,6 +25,8 @@ class DigitalTwinResource extends Resource
     
     protected static ?string $navigationLabel = 'Цифровые двойники';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Form $form): Form
     {
         return $form
