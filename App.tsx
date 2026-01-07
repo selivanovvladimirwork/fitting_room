@@ -27,7 +27,7 @@ const App: React.FC = () => {
       setCurrentView(View.AVATAR_SETTINGS);
     }
   }, [isAuthenticated, isNewUser]);
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [currentPostList, setCurrentPostList] = useState<Post[]>([]);
   const [activeProfileUser, setActiveProfileUser] = useState<string | null>(null);
   const [fittingPost, setFittingPost] = useState<Post | null>(null);
@@ -176,7 +176,7 @@ const App: React.FC = () => {
   }, [currentView]);
 
   const handleSelectPost = (post: Post, list: Post[]) => {
-    setSelectedPostId(post.id);
+    setSelectedPost(post);
     setCurrentPostList(list);
     setCurrentView(View.POST_DETAIL);
   };
@@ -209,14 +209,14 @@ const App: React.FC = () => {
   };
 
   const handleNavigatePost = (direction: 'next' | 'prev') => {
-    if (!selectedPostId || currentPostList.length === 0) return;
-    const currentIndex = currentPostList.findIndex(p => p.id === selectedPostId);
+    if (!selectedPost || currentPostList.length === 0) return;
+    const currentIndex = currentPostList.findIndex(p => p.id === selectedPost.id);
     let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
 
     if (nextIndex >= currentPostList.length) nextIndex = 0;
     if (nextIndex < 0) nextIndex = currentPostList.length - 1;
 
-    setSelectedPostId(currentPostList[nextIndex].id);
+    setSelectedPost(currentPostList[nextIndex]);
   };
 
   const handleNavigateToProfile = (username: string) => {
@@ -307,10 +307,9 @@ const App: React.FC = () => {
         />
       );
       case View.POST_DETAIL:
-        const post = currentPostList.find(p => p.id === selectedPostId);
-        return post ? (
+        return selectedPost ? (
           <PostDetailView
-            post={post}
+            post={selectedPost}
             onBack={() => setCurrentView(View.FEED)}
             onNavigate={handleNavigatePost}
             onSelectPost={handleSelectPost}

@@ -71,11 +71,20 @@ export const authApi = {
         }
     },
 
+    async updateProfile(data: { name?: string; nickname?: string; bio?: string }) {
+        const response = await fetch(`${API_BASE}/user/profile`, {
+            method: 'PUT',
+            headers: getHeaders(true),
+            body: JSON.stringify(data),
+        });
+        return handleResponse<{ user: any }>(response);
+    },
+
     async getUser() {
         const response = await fetch(`${API_BASE}/user`, {
             headers: getHeaders(true),
         });
-        return handleResponse<{ id: number; name: string; nickname: string; email: string }>(response);
+        return handleResponse<{ id: number; name: string; nickname: string; email: string; bio?: string }>(response);
     },
 
     isAuthenticated(): boolean {

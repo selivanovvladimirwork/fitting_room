@@ -870,8 +870,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> История {generationHistory.length > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{generationHistory.length}</span>}
             </button>
-            <input type="file" id="desk-upload" className="hidden" onChange={handleFileUpload} />
-            <label htmlFor="desk-upload" className="px-8 py-3 bg-gray-100 rounded-full text-[9px] font-bold uppercase tracking-widest cursor-pointer hover:bg-black hover:text-white transition-colors flex items-center justify-center text-center">Загрузить</label>
+
           </div>
         </div>
 

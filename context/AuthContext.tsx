@@ -6,6 +6,7 @@ interface User {
     name: string;
     nickname: string;
     email: string;
+    bio?: string;
 }
 
 interface AuthContextType {

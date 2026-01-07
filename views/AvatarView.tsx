@@ -31,6 +31,45 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
   const [activeTab, setActiveTab] = useState<'groups' | 'following' | 'saved' | 'liked' | 'my_posts'>('my_posts');
   const [viewCollection, setViewCollection] = useState<string | null>(null);
 
+  // Bio Editing State
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [bioText, setBioText] = useState(user?.bio || '');
+
+  // Update bioText when user changes (e.g. after save)
+  React.useEffect(() => {
+    if (user?.bio) setBioText(user.bio);
+  }, [user?.bio]);
+
+  const handleSaveBio = async () => {
+    if (bioText === user?.bio) {
+      setIsEditingBio(false);
+      return;
+    }
+
+    try {
+      // Optimistic update would require Context update, but for now we reload or wait for re-fetch
+      // Ideally AuthContext should expose an update method.
+      // We will assume api.auth.updateProfile exists and works, then we might need to refresh user.
+      // Since AuthContext doesn't have updateUser, we might just rely on a page refresh or context reload if available.
+      // Actually, we should probably add updateUser to AuthContext or just call login again? No.
+      // Let's call the API directly here.
+
+      const { authApi } = require('../services/api'); // Dynamic import to avoid cycles/errors if not fully ready? No, explicit import above.
+      // Actually we need to import authApi.
+
+      await import('../services/api').then(async ({ authApi }) => {
+        await authApi.updateProfile({ bio: bioText });
+        // Force reload user in context? context.setUser would be ideal.
+        // For now, let's just refresh the page or rely on next fetch.
+        window.location.reload();
+      });
+
+    } catch (e) {
+      console.error(e);
+    }
+    setIsEditingBio(false);
+  };
+
   // handleCreateGroup removed, utilizing onOpenCreateCollection directly
 
   const MOCK_IMAGES = [
@@ -64,10 +103,46 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
       {/* Profile Header Block */}
       <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-12 gap-8">
         <div className="flex items-end gap-6">
-          <div className="mb-2">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase mb-1">
+          <div className="mb-2 flex flex-col">
+            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase mb-2">
               @{user?.nickname || user?.name || 'USER'}
             </h1>
+
+            {/* User Bio */}
+            <div className="relative group max-w-md mt-2">
+              {isEditingBio ? (
+                <div className="animate-in fade-in zoom-in duration-200">
+                  <textarea
+                    autoFocus
+                    value={bioText}
+                    onChange={(e) => setBioText(e.target.value.slice(0, 120))}
+                    onBlur={handleSaveBio}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSaveBio();
+                      }
+                    }}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm text-gray-600 focus:ring-2 focus:ring-black outline-none resize-none"
+                    rows={3}
+                    placeholder="Расскажите о себе (до 120 символов)..."
+                  />
+                  <div className="flex justify-between items-center mt-1 px-1">
+                    <span className="text-[10px] text-gray-400 font-medium tracking-widest uppercase">{bioText.length}/120</span>
+                    <span className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">Enter для сохранения</span>
+                  </div>
+                </div>
+              ) : (
+                <div onClick={() => setIsEditingBio(true)} className="cursor-pointer group/bio">
+                  <p className={`text-sm md:text-base leading-relaxed ${user?.bio ? 'text-gray-500' : 'text-gray-300 italic'}`}>
+                    {user?.bio || 'Добавить описание профиля...'}
+                  </p>
+                  <div className="absolute -right-6 top-0 opacity-0 group-hover/bio:opacity-100 transition-opacity p-1 text-gray-400">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -92,7 +167,7 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
             className={`px-6 py-3 rounded-full font-bold uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 ${activeSection === 'edit_avatar' ? 'bg-black text-white shadow-lg' : 'bg-gray-100 hover:bg-black hover:text-white'}`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-            Редактировать
+            Аватары
           </button>
           <button
             onClick={onLogout}
@@ -109,18 +184,15 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
           {/* Navigation Chips */}
           <div className="border-b border-gray-100 mb-8 overflow-x-auto pb-2">
             <div className="flex gap-2 min-w-max">
-              {['my_posts', 'groups', 'following', 'saved', 'downloaded', 'generated', 'liked'].map(tab => (
+              {['my_posts', 'following', 'saved', 'liked'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab as any)}
                   className={`px-6 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
                 >
-                  {tab === 'groups' && 'Группы'}
                   {tab === 'my_posts' && 'Публикации'}
                   {tab === 'following' && 'Подписки'}
                   {tab === 'saved' && 'Избранное'}
-                  {tab === 'downloaded' && 'Скачанное'}
-                  {tab === 'generated' && 'Мои генерации'}
                   {tab === 'liked' && 'Лайки'}
                 </button>
               ))}
@@ -129,94 +201,7 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
 
           {/* Tab Content */}
           <div className="animate-in fade-in duration-500 min-h-[400px]">
-            {activeTab === 'groups' && (
-              <>
-                {viewCollection ? (
-                  <div className="animate-in fade-in slide-in-from-right-4">
-                    {/* Collection Detail Header */}
-                    <div className="flex items-center justify-between mb-8">
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => setViewCollection(null)}
-                          className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-black hover:text-white transition-all"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-                        </button>
-                        <h2 className="text-2xl font-bold">{collections.find(c => c.id === viewCollection)?.name}</h2>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (confirm('Удалить эту группу?')) {
-                            onDeleteCollection(viewCollection);
-                            setViewCollection(null);
-                          }
-                        }}
-                        className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 transition-all"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
 
-                    {/* Items Grid */}
-                    <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4">
-                      {collections.find(c => c.id === viewCollection)?.items.length === 0 ? (
-                        <div className="col-span-full py-20 text-center text-gray-400">
-                          <p>В этой группе пока нет образов</p>
-                        </div>
-                      ) : (
-                        collections.find(c => c.id === viewCollection)?.items.map((post, idx) => (
-                          <div key={post.id} className="break-inside-avoid mb-4">
-                            <PostCard
-                              post={post}
-                              onClick={(p) => onSelectPost(p, [])}
-                              hideActions
-                            />
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Create Button */}
-                    <button
-                      onClick={onOpenCreateCollection}
-                      className="aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-[32px] flex flex-col items-center justify-center gap-3 text-gray-400 hover:border-black hover:text-black hover:bg-white transition-all group"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest">Создать</span>
-                    </button>
-
-                    {/* Collection List */}
-                    {collections.map(collection => (
-                      <div
-                        key={collection.id}
-                        onClick={() => setViewCollection(collection.id)}
-                        className="relative group cursor-pointer hover:z-20"
-                      >
-                        {/* Stack Layers - Diagonal Deck */}
-                        <div className="absolute inset-0 bg-white border border-gray-200 rounded-[32px] translate-x-3 group-hover:translate-x-5 transition-transform duration-500 ease-out shadow-sm"></div>
-                        <div className="absolute inset-0 bg-white border border-gray-200 rounded-[32px] translate-x-2 group-hover:translate-x-3.5 transition-transform duration-500 ease-out shadow-sm"></div>
-                        <div className="absolute inset-0 bg-white border border-gray-200 rounded-[32px] translate-x-1 group-hover:translate-x-2 transition-transform duration-500 ease-out shadow-sm"></div>
-
-                        {/* Main Card */}
-                        <div className="relative aspect-square bg-white rounded-[32px] p-6 flex flex-col justify-between border border-gray-100 transition-transform duration-300 shadow-sm z-10">
-                          <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-black group-hover:scale-110 transition-transform shadow-sm">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-lg leading-tight mb-2 line-clamp-2">{collection.name}</h4>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{collection.items.length} фото</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
 
             {activeTab === 'my_posts' && (
               <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0">
@@ -309,14 +294,7 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
               </div>
             )}
 
-            {(activeTab === 'downloaded' || activeTab === 'generated') && (
-              <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-[32px] border border-dashed border-gray-200">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
-                  <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" /></svg>
-                </div>
-                <p className="text-gray-400 font-medium text-sm">В этом разделе пока пусто</p>
-              </div>
-            )}
+
           </div>
         </>
       )}

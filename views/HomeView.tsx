@@ -49,6 +49,14 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
     if (initialFittingPost) {
       setSelectedFittingItem(initialFittingPost);
       setShowGeneration(true);
+
+      // Add to wardrobe if not present
+      setWardrobe(prev => {
+        if (prev.some(p => p.id === initialFittingPost.id)) return prev;
+        return [initialFittingPost, ...prev];
+      });
+      setCurrentSlide(0);
+
       setTimeout(() => {
         const generationBlock = document.getElementById('generation-block');
         if (generationBlock) {
@@ -82,23 +90,25 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
 
   const handleAddToQueue = (item: Post) => {
     requireAuth(() => {
-      if (fittingQueue.some(p => p.id === item.id)) return;
-      setFittingQueue(prev => [...prev, item]);
-      if (!selectedFittingItem) {
-        setSelectedFittingItem(item);
-        setShowGeneration(true);
+      // Toggle logic: if already selected, deselect it
+      if (fittingQueue.some(p => p.id === item.id)) {
+        setFittingQueue([]);
+        setSelectedFittingItem(null);
+        setShowGeneration(false);
+        return;
       }
+
+      // Single selection: replace entire queue with new item
+      setFittingQueue([item]);
+      setSelectedFittingItem(item);
+      setShowGeneration(true);
     });
   };
 
   const removeFromQueue = (id: string) => {
-    setFittingQueue(prev => {
-      const filtered = prev.filter(p => p.id !== id);
-      if (selectedFittingItem?.id === id) {
-        setSelectedFittingItem(filtered.length > 0 ? filtered[0] : null);
-      }
-      return filtered;
-    });
+    setFittingQueue([]);
+    setSelectedFittingItem(null);
+    setShowGeneration(false);
   };
 
   const [selectedFittingItem, setSelectedFittingItem] = useState<Post | null>(null);
@@ -125,13 +135,13 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
     setTouchEnd(0);
   };
 
-  useEffect(() => {
-    if (totalSlides === 0) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % totalSlides);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [totalSlides]);
+  const handlePrevSlide = () => {
+    if (totalSlides > 0) setCurrentSlide((prev) => (prev - 1 + totalSlides) % totalSlides);
+  };
+
+  const handleNextSlide = () => {
+    if (totalSlides > 0) setCurrentSlide((prev) => (prev + 1) % totalSlides);
+  };
 
   const handleToggleGeneration = () => {
     requireAuth(() => setShowGeneration(!showGeneration));
@@ -181,11 +191,11 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
       </div>
 
       {/* 2. Wardrobe Carousel */}
-      <div className="mb-8">
+      <div className="mb-24">
         <div className="flex items-center justify-between mb-10">
-          <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase flex items-center gap-3">
+          <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase flex items-center gap-4">
             Примерочная
-            <span className="text-[10px] bg-black text-white px-2 py-0.5 rounded-full shadow-lg align-middle transform -translate-y-1">BETA</span>
+            <span className="text-[10px] bg-white border border-gray-200 text-black px-3 py-1 rounded-full align-middle transform -translate-y-1 tracking-widest font-bold">BETA</span>
           </h2>
         </div>
 
@@ -199,6 +209,24 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
           </label>
 
           <div className="flex-1 rounded-[24px] overflow-hidden relative bg-white touch-pan-y" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+            {/* Navigation Arrows */}
+            {totalSlides > 1 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handlePrevSlide(); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg hover:bg-black hover:text-white transition-all z-20"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleNextSlide(); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg hover:bg-black hover:text-white transition-all z-20"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </>
+            )}
+
             <div className="flex h-full transition-transform duration-700 ease-in-out gap-2" style={{ transform: `translateX(-${currentSlide * (100 / (window.innerWidth < 768 ? 1.2 : 3))}%)` }}>
               {wardrobe.map(item => (
                 <div key={item.id} onClick={() => handleAddToQueue(item)} className={`min-w-[80%] md:min-w-[32%] h-full relative rounded-[24px] md:rounded-[32px] overflow-hidden group cursor-pointer transition-all ${fittingQueue.some(p => p.id === item.id) ? 'ring-4 ring-black ring-inset' : ''}`}>
@@ -219,28 +247,6 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
           </div>
         </div>
       </div>
-
-      {/* 3. Fitting Queue Section */}
-      {fittingQueue.length > 0 && (
-        <div className="mb-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-medium uppercase tracking-widest text-gray-800 flex items-center gap-3">
-              Выбрано для примерки
-            </h2>
-          </div>
-          <div className="flex gap-4 overflow-x-auto p-4 scrollbar-hide">
-            {fittingQueue.map(item => (
-              <div key={item.id} className={`relative w-24 md:w-32 flex-shrink-0 aspect-[3/4] rounded-2xl overflow-hidden cursor-pointer group border-2 transition-all ${selectedFittingItem?.id === item.id ? 'border-black scale-105 shadow-xl' : 'border-transparent'}`} onClick={() => setSelectedFittingItem(item)}>
-                <img src={item.imageUrl} className="w-full h-full object-cover" />
-                <div className={`absolute inset-0 transition-opacity ${selectedFittingItem?.id === item.id ? 'bg-black/0' : 'bg-black/20 group-hover:bg-black/0'}`} />
-                <button onClick={(e) => { e.stopPropagation(); removeFromQueue(item.id); }} className="absolute top-2 right-2 w-6 h-6 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg className="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Inline Generation Block */}
       {showGeneration && (
