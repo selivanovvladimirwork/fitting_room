@@ -860,7 +860,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       </div >
 
       {/* Wardrobe */}
-      < div className="px-4" >
+      <div className="px-4 pb-20">
         <div className="flex items-end justify-between mb-10">
           <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase">Гардероб</h2>
           <div className="flex gap-3">

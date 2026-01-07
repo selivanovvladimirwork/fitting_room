@@ -182,10 +182,10 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
 
       {/* 2. Wardrobe Carousel */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-medium uppercase tracking-widest text-gray-800 flex items-center gap-3">
-            Гардероб
-            <span className="text-[10px] bg-black text-white px-2 py-0.5 rounded-full shadow-lg">BETA</span>
+        <div className="flex items-center justify-between mb-10">
+          <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase flex items-center gap-3">
+            Примерочная
+            <span className="text-[10px] bg-black text-white px-2 py-0.5 rounded-full shadow-lg align-middle transform -translate-y-1">BETA</span>
           </h2>
         </div>
 
@@ -226,10 +226,9 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-medium uppercase tracking-widest text-gray-800 flex items-center gap-3">
               Выбрано для примерки
-              <span className="text-[10px] bg-black text-white px-2 py-0.5 rounded-full">{fittingQueue.length}</span>
             </h2>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+          <div className="flex gap-4 overflow-x-auto p-4 scrollbar-hide">
             {fittingQueue.map(item => (
               <div key={item.id} className={`relative w-24 md:w-32 flex-shrink-0 aspect-[3/4] rounded-2xl overflow-hidden cursor-pointer group border-2 transition-all ${selectedFittingItem?.id === item.id ? 'border-black scale-105 shadow-xl' : 'border-transparent'}`} onClick={() => setSelectedFittingItem(item)}>
                 <img src={item.imageUrl} className="w-full h-full object-cover" />
@@ -260,8 +259,8 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
       )}
 
       {/* 4. Recommendations */}
-      <div className="mb-12">
-        <h2 className="text-xl font-medium uppercase tracking-widest text-gray-800 mb-8 border-b border-gray-100 pb-4">Рекомендации</h2>
+      <div className="mb-20">
+        <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase mb-10 border-b border-gray-100 pb-4">Рекомендации</h2>
         <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 space-y-2 md:space-y-4 w-full">
           {curatedPosts.map((post) => (
             <div key={post.id} className="break-inside-avoid mb-4">
