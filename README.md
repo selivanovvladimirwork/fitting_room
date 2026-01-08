@@ -47,6 +47,54 @@ Backend часть проекта "Fitting Room", построенная на La
    git push origin back
    ```
 
+## Production Deployment (Reg.ru)
+
+**Backend URL:** `https://adminfittingroom.fixers.su`  
+**Admin Panel:** `https://adminfittingroom.fixers.su/public/admin`
+
+### Первоначальный деплой
+
+1. Загрузите файлы в `~/www/adminfittingroom.fixers.su/`
+2. Установите зависимости:
+   ```bash
+   php composer.phar install --no-dev --optimize-autoloader
+   ```
+3. Настройте `.env` (DB credentials, APP_KEY, APP_URL)
+4. Выполните:
+   ```bash
+   php artisan key:generate
+   php artisan storage:link
+   php artisan migrate --force
+   chmod -R 775 storage bootstrap/cache
+   php artisan config:cache
+   ```
+
+### Корневой .htaccess
+
+Создайте `~/www/adminfittingroom.fixers.su/.htaccess`:
+```apache
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L,QSA]
+</IfModule>
+```
+
+### CORS
+
+Настроен в `config/cors.php`. После изменений выполните:
+```bash
+php artisan config:cache
+```
+
+### Обновление на сервере
+
+```bash
+cd ~/www/adminfittingroom.fixers.su/
+git pull origin back
+php artisan config:clear
+php artisan cache:clear
+```
+
 ## Troubleshooting: Ручной запуск миграций
 
 Если `php artisan migrate` не работает из консоли (ошибки путей, версий PHP и т.д.), используйте **PHP-скрипт через браузер**:
