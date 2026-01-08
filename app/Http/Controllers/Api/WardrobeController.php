@@ -10,19 +10,29 @@ use Illuminate\Http\JsonResponse;
 class WardrobeController extends Controller
 {
     /**
-     * Получить гардероб пользователя
-     * Возвращает все продукты + пользовательские загрузки
+     * Получить гардероб пользователя (только сохранённые генерации)
      */
     public function index(Request $request): JsonResponse
     {
-        // Системные продукты (каталог)
-        $products = Product::where('is_active', true)
+        $products = Product::where('user_id', $request->user()->id)
+            ->where('brand', 'Virtual Fit') // Только сохранённые результаты генерации
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(fn($p) => $this->formatProduct($p));
 
-        // Пользовательские загрузки хранятся в user meta или отдельной таблице
-        // Пока возвращаем только каталог
+        return response()->json($products);
+    }
+
+    /**
+     * Получить каталог товаров (системные продукты для примерки)
+     */
+    public function catalog(Request $request): JsonResponse
+    {
+        $products = Product::whereNull('user_id')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn($p) => $this->formatProduct($p));
+
         return response()->json($products);
     }
 
@@ -39,12 +49,9 @@ class WardrobeController extends Controller
 
         // Создаём как приватный продукт пользователя
         $product = Product::create([
-            'name' => $validated['title'] ?? 'Загруженная вещь',
             'name_ru' => $validated['title'] ?? 'Загруженная вещь',
             'brand' => $validated['brand'] ?? 'Моя вещь',
-            'image_url' => $validated['image_url'],
-            'price' => 0,
-            'is_active' => true,
+            'images' => [$validated['image_url']],
             'user_id' => $request->user()->id,
         ]);
 
@@ -67,18 +74,32 @@ class WardrobeController extends Controller
     }
 
     /**
-     * Форматировать продукт для frontend (как Post)
+     * Форматировать продукт для frontend
      */
     private function formatProduct(Product $product): array
     {
+        $images = $product->images ?? [];
+        $firstImage = !empty($images) ? $images[0] : null;
+        
+        // Check if image is already a full URL
+        $imageUrl = null;
+        if ($firstImage) {
+            if (str_starts_with($firstImage, 'http://') || str_starts_with($firstImage, 'https://')) {
+                $imageUrl = $firstImage;
+            } else {
+                $imageUrl = url('storage/' . $firstImage);
+            }
+        }
+        
         return [
             'id' => 'product-' . $product->id,
-            'imageUrl' => $product->image_url,
+            'imageUrl' => $imageUrl,
             'author' => $product->brand,
-            'title' => $product->name_ru ?? $product->name,
+            'title' => $product->name_ru,
             'likes' => 0,
             'isPrivate' => (bool) $product->user_id,
             'tags' => ['Virtual Fit'],
         ];
     }
 }
+

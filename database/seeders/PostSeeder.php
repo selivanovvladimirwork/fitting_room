@@ -26,9 +26,19 @@ class PostSeeder extends Seeder
         ];
 
         foreach ($posts as $post) {
+            // Извлекаем nickname без @
+            $nickname = ltrim($post['author_name'], '@');
+            $user = \App\Models\User::where('nickname', $nickname)->first();
+            
+            if (!$user) {
+                echo "Warning: User {$nickname} not found, skipping post\n";
+                continue;
+            }
+
             Post::firstOrCreate(
                 ['image_url' => $post['image_url']],
                 [
+                    'user_id' => $user->id,
                     'author_name' => $post['author_name'],
                     'likes' => $post['likes'],
                     'tags' => $post['tags'],

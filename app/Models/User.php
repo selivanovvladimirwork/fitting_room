@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class User extends Authenticatable
 {
@@ -21,6 +22,8 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'nickname',
+        'bio',
+        'phone',
         'email',
         'password',
     ];
@@ -46,10 +49,62 @@ class User extends Authenticatable
     ];
 
     /**
+     * Посты пользователя
+     */
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    /**
      * Цифровые двойники пользователя
      */
     public function digitalTwins(): HasMany
     {
         return $this->hasMany(DigitalTwin::class);
+    }
+
+    /**
+     * Группы постов пользователя
+     */
+    public function postGroups(): HasMany
+    {
+        return $this->hasMany(PostGroup::class);
+    }
+
+    /**
+     * На кого подписан пользователь
+     */
+    public function following(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'follows', 'follower_id', 'following_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Подписчики пользователя
+     */
+    public function followers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'follows', 'following_id', 'follower_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Сохранённые посты
+     */
+    public function savedPosts(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'saved_posts')
+            ->withTimestamps('created_at', null);
+    }
+
+    /**
+     * Лайкнутые посты
+     */
+    public function likedPosts(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'liked_posts')
+            ->withTimestamps('created_at', null);
     }
 }

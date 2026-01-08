@@ -29,34 +29,22 @@ class ProductResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('Название (EN)')
-                    ->required()
-                    ->maxLength(255),
                 Forms\Components\TextInput::make('name_ru')
-                    ->label('Название (RU)')
+                    ->label('Название')
+                    ->required()
                     ->maxLength(255),
                 Forms\Components\TextInput::make('brand')
                     ->label('Бренд')
                     ->maxLength(255),
-                Forms\Components\TextInput::make('price')
-                    ->label('Цена')
-                    ->required()
-                    ->numeric()
-                    ->default(0.00)
-                    ->prefix('₽'),
-                Forms\Components\FileUpload::make('image_url')
-                    ->label('Изображение')
-                    ->image(),
+                Forms\Components\FileUpload::make('images')
+                    ->label('Изображения')
+                    ->multiple()
+                    ->reorderable()
+                    ->image()
+                    ->imageEditor(),
                 Forms\Components\TextInput::make('store_url')
                     ->label('Ссылка на магазин')
                     ->maxLength(255),
-                Forms\Components\Select::make('category_id')
-                    ->label('Категория')
-                    ->relationship('category', 'name'),
-                Forms\Components\Toggle::make('is_active')
-                    ->label('Активен')
-                    ->required(),
             ]);
     }
 
@@ -64,28 +52,26 @@ class ProductResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->searchable(),
                 Tables\Columns\TextColumn::make('name_ru')
+                    ->label('Название')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('brand')
+                    ->label('Бренд')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('price')
-                    ->money()
-                    ->sortable(),
-                Tables\Columns\ImageColumn::make('image_url'),
+                Tables\Columns\ImageColumn::make('images')
+                    ->label('Изображение')
+                    ->circular()
+                    ->stacked(),
                 Tables\Columns\TextColumn::make('store_url')
+                    ->label('Ссылка')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('category.name')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\IconColumn::make('is_active')
-                    ->boolean(),
                 Tables\Columns\TextColumn::make('created_at')
+                    ->label('Создан')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Обновлён')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -106,7 +92,7 @@ class ProductResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\PostsRelationManager::class,
         ];
     }
 

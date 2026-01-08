@@ -20,16 +20,20 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'nickname' => 'required|string|max:50|unique:users|regex:/^[a-zA-Z0-9_]+$/',
             'email' => 'required|string|email|max:255|unique:users',
+            'phone' => 'required|string|max:20|unique:users',
             'password' => 'required|string|min:8|confirmed',
         ], [
             'nickname.regex' => 'Никнейм может содержать только латинские буквы, цифры и подчёркивание',
             'nickname.unique' => 'Этот никнейм уже занят',
+            'phone.unique' => 'Этот номер телефона уже зарегистрирован',
+            'phone.required' => 'Номер телефона обязателен',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'nickname' => $validated['nickname'],
             'email' => $validated['email'],
+            'phone' => $validated['phone'],
             'password' => Hash::make($validated['password']),
         ]);
 
@@ -41,6 +45,7 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'nickname' => $user->nickname,
                 'email' => $user->email,
+                'phone' => $user->phone,
             ],
             'token' => $token,
         ], 201);
@@ -99,6 +104,36 @@ class AuthController extends Controller
             'name' => $user->name,
             'nickname' => $user->nickname,
             'email' => $user->email,
+            'bio' => $user->bio,
+        ]);
+    }
+
+    /**
+     * Обновить профиль пользователя
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'nickname' => 'sometimes|string|max:50|unique:users,nickname,' . $user->id . '|regex:/^[a-zA-Z0-9_]+$/',
+            'bio' => 'sometimes|nullable|string|max:120',
+        ], [
+            'nickname.regex' => 'Никнейм может содержать только латинские буквы, цифры и подчёркивание',
+            'nickname.unique' => 'Этот никнейм уже занят',
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'nickname' => $user->nickname,
+                'email' => $user->email,
+                'bio' => $user->bio,
+            ],
         ]);
     }
 }

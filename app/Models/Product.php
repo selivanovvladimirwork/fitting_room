@@ -4,15 +4,24 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
-    protected $fillable = ['name', 'name_ru', 'brand', 'price', 'image_url', 'store_url', 'category_id', 'is_active', 'user_id'];
+    protected $fillable = ['name_ru', 'brand', 'images', 'store_url', 'user_id'];
 
-    protected $casts = ['price' => 'decimal:2', 'is_active' => 'boolean'];
+    protected $casts = [
+        'images' => 'array',
+    ];
 
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
+
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
 }
+

@@ -25,10 +25,17 @@ class PostResource extends Resource
     
     protected static ?string $navigationLabel = 'Публикации';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
+                Forms\Components\Select::make('product_id')
+                    ->label('Товар')
+                    ->relationship('product', 'name')
+                    ->searchable()
+                    ->preload(),
                 Forms\Components\Select::make('user_id')
                     ->label('Пользователь')
                     ->relationship('user', 'name'),

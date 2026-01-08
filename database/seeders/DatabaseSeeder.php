@@ -13,8 +13,12 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            PostSeeder::class,
-            ProductSeeder::class,
+            AdminSeeder::class,
+            UserSeeder::class,
+            // PostSeeder::class, // Отключаем старый PostSeeder, так как новый ContentSeeder создает посты умнее
+            // ProductSeeder::class, // Тоже отключаем
+            ContentSeeder::class, // Новый главный сидер контента
+            InteractionSeeder::class,
         ]);
     }
 }

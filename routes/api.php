@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\DigitalTwinController;
 use App\Http\Controllers\Api\WardrobeController;
 use App\Http\Controllers\Api\MigrationController;
 use App\Http\Controllers\Api\GenerationController;
+use App\Http\Controllers\Api\PostGroupController;
+use App\Http\Controllers\Api\ProfileDataController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,13 +22,31 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/posts', [PostController::class, 'index']);
 Route::get('/posts/{post}', [PostController::class, 'show']);
-Route::get('/wardrobe', [WardrobeController::class, 'index']);
+Route::get('/users/{nickname}/posts', [PostController::class, 'byUser']); // Посты пользователя по никнейму
+Route::get('/catalog', [WardrobeController::class, 'catalog']); // Системные товары для примерки
 
 // Защищённые роуты (требуют аутентификации)
 Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
+    Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+    
+    // Profile Data
+    Route::get('/profile/posts', [ProfileDataController::class, 'myPosts']);
+    Route::get('/profile/following', [ProfileDataController::class, 'following']);
+    Route::get('/profile/saved', [ProfileDataController::class, 'savedPosts']);
+    Route::get('/profile/liked', [ProfileDataController::class, 'likedPosts']);
+    
+    // Post interactions
+    Route::post('/posts/{post}/like', [ProfileDataController::class, 'likePost']);
+    Route::delete('/posts/{post}/like', [ProfileDataController::class, 'unlikePost']);
+    Route::post('/posts/{post}/save', [ProfileDataController::class, 'savePost']);
+    Route::delete('/posts/{post}/save', [ProfileDataController::class, 'unsavePost']);
+    
+    // Follow/Unfollow
+    Route::post('/users/{user}/follow', [ProfileDataController::class, 'followUser']);
+    Route::delete('/users/{user}/follow', [ProfileDataController::class, 'unfollowUser']);
     
     // Posts
     Route::post('/posts', [PostController::class, 'store']);
@@ -37,9 +57,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/avatars/{digitalTwin}', [DigitalTwinController::class, 'update']);
     Route::delete('/avatars/{digitalTwin}', [DigitalTwinController::class, 'destroy']);
     
-    // Wardrobe
+    // Wardrobe (user's personal items)
+    Route::get('/wardrobe', [WardrobeController::class, 'index']);
     Route::post('/wardrobe', [WardrobeController::class, 'store']);
     Route::delete('/wardrobe/{product}', [WardrobeController::class, 'destroy']);
+    
+    // Post Groups
+    Route::get('/post-groups', [PostGroupController::class, 'index']);
+    Route::post('/post-groups', [PostGroupController::class, 'store']);
+    Route::post('/post-groups/sync', [PostGroupController::class, 'sync']);
+    Route::put('/post-groups/{postGroup}', [PostGroupController::class, 'update']);
+    Route::delete('/post-groups/{postGroup}', [PostGroupController::class, 'destroy']);
     
     // Data Migration
     Route::post('/migrate-local-data', [MigrationController::class, 'migrateLocalData']);
@@ -47,3 +75,4 @@ Route::middleware('auth:sanctum')->group(function () {
     // AI Generation
     Route::post('/generate', [GenerationController::class, 'generate']);
 });
+

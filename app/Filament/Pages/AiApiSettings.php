@@ -33,8 +33,7 @@ class AiApiSettings extends Page implements HasForms
     {
         $settings = AiApiSetting::getInstance();
         $this->form->fill([
-            'photo_api_key' => $settings->photo_api_key,
-            'video_api_key' => $settings->video_api_key,
+            'api_key' => $settings->api_key,
         ]);
     }
     
@@ -43,12 +42,13 @@ class AiApiSettings extends Page implements HasForms
         return $form
             ->schema([
                 Section::make('API ключ для генерации')
+                    ->description('Единый ключ для генерации фото и видео (OpenRouter)')
                     ->schema([
-                        TextInput::make('photo_api_key')
+                        TextInput::make('api_key')
                             ->label('API ключ')
                             ->password()
                             ->revealable()
-                            ->placeholder('Введите API ключ для генерации'),
+                            ->placeholder('sk-...'),
                     ]),
             ])
             ->statePath('data');
@@ -70,3 +70,4 @@ class AiApiSettings extends Page implements HasForms
         return AiApiSetting::getInstance();
     }
 }
+

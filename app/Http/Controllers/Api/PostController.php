@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Post;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -19,7 +20,7 @@ class PostController extends Controller
             ->get()
             ->map(fn($p) => [
                 'id' => (string) $p->id,
-                'imageUrl' => $p->image_url,
+                'imageUrl' => url('storage/' . $p->image_url),
                 'author' => $p->author_name,
                 'likes' => $p->likes,
                 'isPrivate' => $p->is_private,
@@ -37,13 +38,41 @@ class PostController extends Controller
     {
         return response()->json([
             'id' => (string) $post->id,
-            'imageUrl' => $post->image_url,
+            'imageUrl' => url('storage/' . $post->image_url),
             'author' => $post->author_name,
             'likes' => $post->likes,
             'isPrivate' => $post->is_private,
             'tags' => $post->tags ?? [],
             'title' => $post->title,
         ]);
+    }
+
+    /**
+     * Получить посты пользователя по никнейму
+     */
+    public function byUser(string $nickname): JsonResponse
+    {
+        $user = User::where('nickname', $nickname)->first();
+        
+        if (!$user) {
+            return response()->json([]);
+        }
+
+        $posts = Post::where('user_id', $user->id)
+            ->where('is_private', false)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn($p) => [
+                'id' => (string) $p->id,
+                'imageUrl' => url('storage/' . $p->image_url),
+                'author' => $p->author_name,
+                'likes' => $p->likes,
+                'isPrivate' => $p->is_private,
+                'tags' => $p->tags ?? [],
+                'title' => $p->title,
+            ]);
+
+        return response()->json($posts);
     }
 
     /**
@@ -71,7 +100,7 @@ class PostController extends Controller
 
         return response()->json([
             'id' => (string) $post->id,
-            'imageUrl' => $post->image_url,
+            'imageUrl' => url('storage/' . $post->image_url),
             'author' => $post->author_name,
             'likes' => $post->likes,
             'isPrivate' => $post->is_private,

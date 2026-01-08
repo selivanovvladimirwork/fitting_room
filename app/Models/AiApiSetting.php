@@ -7,8 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class AiApiSetting extends Model
 {
     protected $fillable = [
-        'photo_api_key',
-        'video_api_key',
+        'api_key',           // Единый ключ для фото и видео
         'photo_tokens_used',
         'video_tokens_used',
         'photo_tokens_limit',
@@ -25,5 +24,16 @@ class AiApiSetting extends Model
     public static function getInstance(): self
     {
         return self::firstOrCreate(['id' => 1]);
+    }
+
+    // Backward compatibility
+    public function getPhotoApiKeyAttribute(): ?string
+    {
+        return $this->api_key;
+    }
+
+    public function getVideoApiKeyAttribute(): ?string
+    {
+        return $this->api_key;
     }
 }
