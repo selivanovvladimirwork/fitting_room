@@ -7,8 +7,16 @@ use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
+use App\Services\ImageService;
+
 class WardrobeController extends Controller
 {
+    protected ImageService $imageService;
+
+    public function __construct(ImageService $imageService)
+    {
+        $this->imageService = $imageService;
+    }
     /**
      * Получить гардероб пользователя (только сохранённые генерации)
      */
@@ -48,10 +56,13 @@ class WardrobeController extends Controller
         ]);
 
         // Создаём как приватный продукт пользователя
+        // Создаём как приватный продукт пользователя
+        $imagePath = $this->imageService->saveFromBase64($validated['image_url'], 'wardrobe');
+        
         $product = Product::create([
             'name_ru' => $validated['title'] ?? 'Загруженная вещь',
             'brand' => $validated['brand'] ?? 'Моя вещь',
-            'images' => [$validated['image_url']],
+            'images' => [$imagePath],
             'user_id' => $request->user()->id,
         ]);
 

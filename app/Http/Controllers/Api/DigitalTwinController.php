@@ -7,8 +7,16 @@ use App\Models\DigitalTwin;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
+use App\Services\ImageService;
+
 class DigitalTwinController extends Controller
 {
+    protected ImageService $imageService;
+
+    public function __construct(ImageService $imageService)
+    {
+        $this->imageService = $imageService;
+    }
     /**
      * Получить аватары текущего пользователя
      */
@@ -41,11 +49,12 @@ class DigitalTwinController extends Controller
 
         // Первое изображение как основное
         $imageUrl = $validated['referenceImages'][0] ?? null;
+        $imagePath = $this->imageService->saveFromBase64($imageUrl, 'avatars');
 
         $avatar = DigitalTwin::create([
             'user_id' => $request->user()->id,
             'name' => $validated['name'],
-            'image_url' => $imageUrl,
+            'image_url' => $imagePath,
             'height' => $validated['stats']['height'],
             'weight' => $validated['stats']['weight'],
             'chest' => $validated['stats']['chest'],
@@ -80,7 +89,10 @@ class DigitalTwinController extends Controller
 
         $updateData = [];
         if (isset($validated['name'])) $updateData['name'] = $validated['name'];
-        if (isset($validated['referenceImages'][0])) $updateData['image_url'] = $validated['referenceImages'][0];
+        if (isset($validated['referenceImages'][0])) {
+            $imagePath = $this->imageService->saveFromBase64($validated['referenceImages'][0], 'avatars');
+            $updateData['image_url'] = $imagePath;
+        }
         if (isset($validated['stats']['height'])) $updateData['height'] = $validated['stats']['height'];
         if (isset($validated['stats']['weight'])) $updateData['weight'] = $validated['stats']['weight'];
         if (isset($validated['stats']['chest'])) $updateData['chest'] = $validated['stats']['chest'];

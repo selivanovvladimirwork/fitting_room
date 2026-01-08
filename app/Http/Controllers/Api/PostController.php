@@ -8,8 +8,16 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
+use App\Services\ImageService;
+
 class PostController extends Controller
 {
+    protected ImageService $imageService;
+
+    public function __construct(ImageService $imageService)
+    {
+        $this->imageService = $imageService;
+    }
     /**
      * Получить все публичные посты
      */
@@ -88,10 +96,13 @@ class PostController extends Controller
             'is_private' => 'nullable|boolean',
         ]);
 
+        // Сохраняем изображение через сервис
+        $imagePath = $this->imageService->saveFromBase64($validated['image_url'], 'posts');
+
         $post = Post::create([
             'user_id' => $request->user()->id,
             'title' => $validated['title'] ?? null,
-            'image_url' => $validated['image_url'],
+            'image_url' => $imagePath, // Сохраняем путь к файлу
             'author_name' => $validated['author_name'] ?? '@' . $request->user()->name,
             'tags' => $validated['tags'] ?? [],
             'is_private' => $validated['is_private'] ?? false,
