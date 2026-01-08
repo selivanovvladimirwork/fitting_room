@@ -7,6 +7,7 @@ interface User {
     nickname: string;
     email: string;
     bio?: string;
+    phone?: string;
 }
 
 interface AuthContextType {
@@ -16,7 +17,7 @@ interface AuthContextType {
     isNewUser: boolean;
     completeOnboarding: () => void;
     login: (email: string, password: string) => Promise<void>;
-    register: (name: string, nickname: string, email: string, password: string, passwordConfirmation: string) => Promise<void>;
+    register: (name: string, nickname: string, email: string, phone: string, password: string, passwordConfirmation: string) => Promise<void>;
     logout: () => Promise<void>;
     isAuthModalOpen: boolean;
     openAuthModal: () => void;
@@ -24,6 +25,7 @@ interface AuthContextType {
     requireAuth: (callback: () => void) => void;
     authError: string | null;
     clearAuthError: () => void;
+    refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,25 +40,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const isAuthenticated = !!user;
 
-    // Check auth on mount
-    useEffect(() => {
-        const checkAuth = async () => {
-            if (authApi.isAuthenticated()) {
-                try {
-                    const userData = await authApi.getUser();
-                    setUser(userData);
-                } catch (error: any) {
-                    console.error('Auth verification failed:', error);
-                    // Only clear token if it's an authentication error (401)
-                    if (error.message && (error.message.includes('Unauthenticated') || error.message.includes('401'))) {
-                        localStorage.removeItem('auth_token');
-                    }
+    const refreshUser = useCallback(async () => {
+        if (authApi.isAuthenticated()) {
+            try {
+                const userData = await authApi.getUser();
+                setUser(userData);
+            } catch (error: any) {
+                console.error('Auth verification failed:', error);
+                // Only clear token if it's an authentication error (401)
+                if (error.message && (error.message.includes('Unauthenticated') || error.message.includes('401'))) {
+                    localStorage.removeItem('auth_token');
                 }
             }
-            setIsLoading(false);
-        };
-        checkAuth();
+        }
+        setIsLoading(false);
     }, []);
+
+    // Check auth on mount
+    useEffect(() => {
+        refreshUser();
+    }, [refreshUser]);
 
     // Execute pending callback after loading completes if authenticated
     useEffect(() => {
@@ -92,10 +95,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [pendingCallback]);
 
-    const register = useCallback(async (name: string, nickname: string, email: string, password: string, passwordConfirmation: string) => {
+    const register = useCallback(async (name: string, nickname: string, email: string, phone: string, password: string, passwordConfirmation: string) => {
         setAuthError(null);
         try {
-            const { user: userData } = await authApi.register(name, nickname, email, password, passwordConfirmation);
+            const { user: userData } = await authApi.register(name, nickname, email, phone, password, passwordConfirmation);
             setUser(userData);
             setIsNewUser(true);
             setIsAuthModalOpen(false);
@@ -158,6 +161,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             requireAuth,
             authError,
             clearAuthError,
+            refreshUser,
         }}>
             {children}
         </AuthContext.Provider>

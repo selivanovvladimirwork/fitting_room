@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-
+import { authApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 interface SettingsViewProps {
@@ -9,7 +9,7 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [formData, setFormData] = useState({
     fullName: user?.name || '',
@@ -31,17 +31,31 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
   }, [user]);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
 
-    // Simulate saving settings (backend connection would be here)
-
-    setTimeout(() => {
+    try {
+      await authApi.updateProfile({
+        name: formData.fullName,
+        nickname: formData.nickname
+      });
+      await refreshUser();
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        if (!embedded) onBack();
+      }, 1500);
+    } catch (error: any) {
+      console.error('Save error:', error);
+      setSaveError(error.message || 'Ошибка сохранения');
+    } finally {
       setIsSaving(false);
-      if (!embedded) onBack();
-    }, 1500);
+    }
   };
 
   return (
@@ -62,30 +76,30 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
       )}
 
       <div className="liquid-glass rounded-[40px] md:rounded-[60px] p-8 md:p-24 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.1)] border border-white">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
 
           {/* Name */}
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Имя</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] ml-5">Имя</label>
             <input
               type="text"
               value={formData.fullName}
               onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
+              className="w-full px-6 md:px-8 py-3 md:py-4 bg-white/50 rounded-full text-sm md:text-base font-medium tracking-tight focus:outline-none focus:ring-4 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm hover:shadow-md"
               placeholder="Введите ваше имя"
             />
           </div>
 
           {/* Nickname */}
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Никнейм</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] ml-5">Никнейм</label>
             <div className="relative">
-              <span className="absolute left-8 md:left-10 top-1/2 -translate-y-1/2 text-gray-400 text-lg md:text-xl">@</span>
+              <span className="absolute left-6 md:left-8 top-1/2 -translate-y-1/2 text-gray-400 text-sm md:text-base">@</span>
               <input
                 type="text"
                 value={formData.nickname}
                 onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
-                className="w-full pl-14 md:pl-16 pr-8 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
+                className="w-full pl-10 md:pl-14 pr-6 py-3 md:py-4 bg-white/50 rounded-full text-sm md:text-base font-medium tracking-tight focus:outline-none focus:ring-4 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm hover:shadow-md"
                 placeholder="ник"
               />
             </div>
@@ -93,24 +107,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
 
           {/* Email */}
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">E-mail</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] ml-5">E-mail</label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
+              className="w-full px-6 md:px-8 py-3 md:py-4 bg-white/50 rounded-full text-sm md:text-base font-medium tracking-tight focus:outline-none focus:ring-4 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm hover:shadow-md"
               placeholder="example@mail.com"
             />
           </div>
 
           {/* Phone */}
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] ml-6">Телефон</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] ml-5">Телефон</label>
             <input
               type="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-8 md:px-10 py-5 md:py-6 bg-white/50 rounded-full text-lg md:text-xl font-light tracking-tight focus:outline-none focus:ring-8 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-lg"
+              className="w-full px-6 md:px-8 py-3 md:py-4 bg-white/50 rounded-full text-sm md:text-base font-medium tracking-tight focus:outline-none focus:ring-4 focus:ring-black/5 transition-all border border-transparent focus:border-white shadow-sm hover:shadow-md"
               placeholder="+7 (000) 000-00-00"
             />
           </div>
@@ -118,12 +132,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
 
         </div>
 
+        {/* Error Message */}
+        {saveError && (
+          <div className="mt-8 p-4 bg-red-50 text-red-600 rounded-2xl text-center text-sm font-medium">
+            {saveError}
+          </div>
+        )}
+
+        {/* Success Message */}
+        {saveSuccess && (
+          <div className="mt-8 p-4 bg-green-50 text-green-600 rounded-2xl text-center text-sm font-medium flex items-center justify-center gap-2">
+            ✓ Изменения сохранены
+          </div>
+        )}
+
         {/* Save Button */}
         <div className="mt-16 md:mt-24 flex justify-end">
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className={`w-full md:w-auto px-12 md:px-20 py-6 md:py-7 bg-black text-white rounded-full text-[12px] font-bold tracking-[0.3em] uppercase transition-all duration-300 shadow-xl flex items-center justify-center gap-6 ${isSaving ? 'opacity-50 scale-95' : 'hover:scale-105 active:scale-95 hover:shadow-2xl'
+            className={`w-full md:w-auto px-10 md:px-12 py-4 md:py-5 bg-black text-white rounded-full text-[10px] font-bold tracking-[0.2em] uppercase transition-all duration-300 shadow-lg flex items-center justify-center gap-4 ${isSaving ? 'opacity-50 scale-95' : 'hover:scale-105 active:scale-95 hover:shadow-xl'
               }`}
           >
             {isSaving ? (
@@ -131,6 +159,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack, embedded = false })
                 <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                 Сохранение
               </>
+            ) : saveSuccess ? (
+              '✓ Сохранено'
             ) : (
               'Сохранить изменения'
             )}

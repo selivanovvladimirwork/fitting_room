@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Scenario, Post, DigitalTwin } from '../types';
 import PostCard from '../components/PostCard';
-import api from '../services/api';
+import { generationApi, wardrobeApi, postsApi } from '../services/api';
 
 interface VirtualFitViewProps {
   initialPost?: Post | null;
@@ -205,33 +205,27 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     }
   }, [activeCloth, embedded]);
 
-  const wardrobePosts: Post[] = useMemo(() => {
-    const validImages = [
-      '/mock/mock_fashion_1_linen_1767375467855.png',
-      '/mock/mock_fashion_2_gown_1767375483429.png',
-      '/mock/mock_fashion_3_hoodie_1767375497361.png',
-      '/mock/mock_fashion_4_floral_1767375511416.png',
-      '/mock/mock_fashion_5_blazer_1767375533683.png',
-      '/mock/mock_fashion_6_denim_1767375546890.png',
-      '/mock/mock_fashion_7_yoga_1767375561414.png',
-      '/mock/mock_fashion_8_trench_1767375574933.png',
-      '/mock/mock_fashion_9_boho_1767375588800.png',
-      '/mock/mock_fashion_10_knit_1767375602151.png',
-      '/mock/mock_history_1_coat_tall_1767381603039.png',
-      '/mock/mock_history_2_shoes_sq_1767381617174.png',
-      '/mock/mock_history_3_dress_tall_1767381630936.png'
-    ];
+  // Wardrobe posts: load from API
+  const [wardrobePosts, setWardrobePosts] = useState<Post[]>([]);
+  const [wardrobeLoading, setWardrobeLoading] = useState(true);
 
-    // Генерируем историю генераций, используя только релевантные изображения
-    return Array.from({ length: 14 }).map((_, i) => ({
-      id: `v${i}`,
-      imageUrl: validImages[i % validImages.length],
-      author: i < validImages.length ? 'Избранное' : 'История',
-      likes: 10 + i * 5,
-      isPrivate: true,
-      tags: ['History']
-    }));
-  }, []);
+  useEffect(() => {
+    const loadWardrobe = async () => {
+      setWardrobeLoading(true);
+      try {
+        const data = await wardrobeApi.getAll();
+        if (Array.isArray(data) && data.length > 0) {
+          setWardrobePosts(data);
+        }
+      } catch (e) {
+        console.error('Failed to load wardrobe from API:', e);
+      } finally {
+        setWardrobeLoading(false);
+      }
+    };
+
+    loadWardrobe();
+  }, [initialPost]); // Reload when fitting item changes
 
   const scenarios = [
     { id: Scenario.WALKING, label: 'Подиум / Ходьба' },
@@ -359,7 +353,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       console.log("[DEBUG] Final Messages Structure:", messagesContent.map(m => m.type));
 
       // Call Backend API
-      const data = await api.generation.generateImage({
+      const data = await generationApi.generateImage({
         model: "google/gemini-2.5-flash-image",
         messages: messages
       });
@@ -455,57 +449,46 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     }
   };
 
-  const handleAddToWardrobe = () => {
+  const handleAddToWardrobe = async () => {
     if (!resultUrl) return;
 
-    const newLook = {
-      id: `look-${Date.now()}`,
-      imageUrl: resultUrl,
-      author: '@ioniua',
-      likes: 0,
-      isPrivate: true,
-      tags: ['Generated', 'Virtual Fit'],
-      title: activeCloth?.title || 'Новый образ'
-    };
-
-    const existing = JSON.parse(localStorage.getItem('user_wardrobe') || '[]');
     try {
-      localStorage.setItem('user_wardrobe', JSON.stringify([newLook, ...existing]));
-    } catch (e) {
-      alert('Ошибка: Хранилище переполнено! Не удалось сохранить образ. Пожалуйста, удалите старые записи.');
-      return;
-    }
+      const newItem = await wardrobeApi.add({
+        image_url: resultUrl,
+        title: activeCloth?.title || 'Новый образ',
+        brand: 'Virtual Fit'
+      });
 
-    if (onSavePost) {
-      onSavePost(newLook);
-    } else {
-      alert('Образ сохранен в ваш гардероб!');
+      // Update local state
+      setWardrobePosts(prev => [newItem, ...prev]);
+
+      if (onSavePost) {
+        onSavePost(newItem);
+      } else {
+        alert('Образ сохранен в ваш гардероб!');
+      }
+    } catch (e) {
+      console.error('Failed to add to wardrobe:', e);
+      alert('Ошибка сохранения. Пожалуйста, авторизуйтесь.');
     }
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!resultUrl) return;
 
-    // Save as public
-    const newLook = {
-      id: `pub-${Date.now()}`,
-      imageUrl: resultUrl,
-      author: '@ioniua',
-      likes: 0,
-      isPrivate: false,
-      tags: ['Published', 'Virtual Fit'],
-      title: activeCloth?.title || 'Новый образ'
-    };
-
-    const existing = JSON.parse(localStorage.getItem('user_wardrobe') || '[]');
     try {
-      localStorage.setItem('user_wardrobe', JSON.stringify([newLook, ...existing]));
-    } catch (e) {
-      alert('Ошибка: Хранилище переполнено! Не удалось опубликовать образ.');
-      return;
-    }
+      await postsApi.create({
+        image_url: resultUrl,
+        title: activeCloth?.title || 'Новый образ',
+        tags: ['Published', 'Virtual Fit'],
+        is_private: false
+      });
 
-    alert('Образ опубликован в ленте!');
+      alert('Образ опубликован в ленте!');
+    } catch (e) {
+      console.error('Failed to publish:', e);
+      alert('Ошибка публикации. Пожалуйста, авторизуйтесь.');
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -601,11 +584,29 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
 
             {/* Stable Image Container */}
             <div className="absolute inset-0 p-4 md:p-8 flex items-center justify-center">
-              <img
-                src={resultUrl || (generationMode === 'image' ? customTargetImage : activeCloth?.imageUrl) || "/mock/mock_avatar_full_001.jpg"}
-                className={`w-full h-full object-contain transition-all duration-700 ${isGenerating ? 'blur-md scale-95 opacity-50' : 'scale-100 opacity-100'}`}
-              />
+              {(resultUrl || activeCloth || customTargetImage || isGenerating) && (
+                <img
+                  src={resultUrl || (generationMode === 'image' ? customTargetImage : activeCloth?.imageUrl) || "/mock/mock_avatar_full_001.jpg"}
+                  className={`w-full h-full object-contain transition-all duration-700 ${isGenerating ? 'blur-md scale-95 opacity-50' : 'scale-100 opacity-100'}`}
+                />
+              )}
             </div>
+
+            {/* Hint Overlay if no activity */}
+            {!resultUrl && !activeCloth && !customTargetImage && !isGenerating && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center cursor-default pointer-events-none">
+                <div className="bg-white/80 backdrop-blur-md px-8 py-6 rounded-3xl shadow-sm border border-white/60 animate-in fade-in zoom-in duration-700 max-w-md text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-base font-bold text-gray-900">
+                      Как сделать генерацию?
+                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black leading-relaxed">
+                      выбери изображение из&nbsp;блока Примерочная, или Рекомендаций
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Loading Overlay */}
             {isGenerating && (
@@ -644,30 +645,30 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         <div className="md:col-span-4 order-2 flex flex-col h-full">
           <div className={`liquid-glass flex flex-col gap-3 h-full ${embedded ? 'p-6 rounded-[40px]' : 'p-6 md:p-8 rounded-[40px] border border-white'}`}>
 
-            {/* MODE SELECTION */}
-            {!generationMode && !isBaseGenerated && (
-              <div className="flex flex-col gap-4 h-full">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Выберите режим</h3>
+            {/* MODE SELECTION - ALWAYS VISIBLE */}
+            <div className="flex flex-col gap-4">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Выберите режим</h3>
+              <div className="flex gap-2">
                 <button
                   onClick={() => setGenerationMode('avatar')}
-                  className="flex-1 bg-gray-50 hover:bg-black hover:text-white rounded-[24px] p-6 flex flex-col items-center justify-center gap-3 transition-all group border border-gray-100"
+                  className={`flex-1 rounded-[24px] p-4 flex flex-col items-center justify-center gap-2 transition-all border ${generationMode === 'avatar' ? 'bg-black text-white border-black' : 'bg-gray-50 text-black border-gray-100 hover:border-black'}`}
                 >
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                    <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-transform ${generationMode === 'avatar' ? 'bg-white/20' : 'bg-white'}`}>
+                    <svg className={`w-5 h-5 ${generationMode === 'avatar' ? 'text-white' : 'text-black'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest">На основе Аватара</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest">На основе Аватара</span>
                 </button>
                 <button
                   onClick={() => setGenerationMode('image')}
-                  className="flex-1 bg-gray-50 hover:bg-black hover:text-white rounded-[24px] p-6 flex flex-col items-center justify-center gap-3 transition-all group border border-gray-100"
+                  className={`flex-1 rounded-[24px] p-4 flex flex-col items-center justify-center gap-2 transition-all border ${generationMode === 'image' ? 'bg-black text-white border-black' : 'bg-gray-50 text-black border-gray-100 hover:border-black'}`}
                 >
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                    <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-transform ${generationMode === 'image' ? 'bg-white/20' : 'bg-white'}`}>
+                    <svg className={`w-5 h-5 ${generationMode === 'image' ? 'text-white' : 'text-black'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest">На основе Фото</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest">На основе Фото</span>
                 </button>
               </div>
-            )}
+            </div>
 
             {/* IMAGE MODE UPLOAD */}
             {generationMode === 'image' && !isBaseGenerated && (
@@ -687,8 +688,8 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
 
 
             {/* IF BASE NOT GENERATED: SHOW 'TRY ON' BUTTON */}
-            {generationMode && !isBaseGenerated ? (
-              <div className="flex flex-col h-full">
+            {generationMode && !isBaseGenerated && (
+              <div className="flex flex-col flex-shrink-0 animate-in fade-in slide-in-from-top-2">
                 {/* Upload Cloth if missing in Avatar Mode OR Image Mode (with photo selected) */}
                 {!activeCloth && (generationMode === 'avatar' || (generationMode === 'image' && customTargetImage)) && (
                   <div className="flex-1 mb-4">
@@ -706,11 +707,8 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
                   </div>
                 )}
 
-                <div className="flex items-center justify-between mb-4">
-                  <button onClick={() => setGenerationMode(null)} className="text-gray-400 hover:text-black transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                  </button>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center flex-1 mr-5">
+                <div className="flex items-center justify-between mb-4 mt-6">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center flex-1">
                     Шаг 1: Примерка
                   </p>
                 </div>
@@ -759,79 +757,80 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
                   </p>
                 </div>
               </div>
-            ) : (
-              <>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center mb-1">
-                  Шаг 2: Настройка
-                </p>
-                {/* Media Tabs - UNLOCKED */}
-                <SlidingTabs
-                  options={[
-                    { id: 'photo', label: 'Фото' },
-                    { id: 'video', label: 'Анимировать' }
-                  ]}
-                  value={mediaMode}
-                  onChange={setMediaMode}
-                />
-
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 px-2 animate-in fade-in">Сценарии</h3>
-                <div className="flex flex-col gap-3 animate-in fade-in">
-                  {scenarios.map(s => (
-                    <button
-                      key={s.id}
-                      disabled={!activeCloth || isGenerating}
-                      onClick={(e) => handleGenerate(e, s.id)}
-                      className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
-                        } disabled:opacity-20`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-
-                  <button
-                    onClick={() => setIsBaseGenerated(false)}
-                    className="mt-4 text-[9px] text-gray-400 uppercase tracking-widest hover:text-black transition-colors"
-                  >
-                    ← К выбору одежды
-                  </button>
-                </div>
-
-                {resultUrl && (
-                  <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-black/5 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleAddToWardrobe}
-                        className="flex-1 py-3 bg-white border border-black/10 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                        В гардероб
-                      </button>
-                      <button
-                        onClick={handlePublish}
-                        className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                        Опубликовать
-                      </button>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleDownload}
-                        className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
-                      >
-                        Скачать
-                      </button>
-                      <button
-                        onClick={handleShare}
-                        className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
-                      >
-                        Поделиться
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
             )}
+
+            {/* SCENARIOS - ALWAYS VISIBLE (BELOW STEP 1) */}
+            <div className={`flex flex-col gap-2 mt-4 transition-all duration-500 ${!generationMode ? '' : ''}`}>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center mb-1">
+                Шаг 2: Настройка
+              </p>
+              {/* Media Tabs - UNLOCKED */}
+              <SlidingTabs
+                options={[
+                  { id: 'photo', label: 'Фото' },
+                  { id: 'video', label: 'Анимировать' }
+                ]}
+                value={mediaMode}
+                onChange={setMediaMode}
+              />
+
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 px-2 animate-in fade-in">Сценарии</h3>
+              <div className="flex flex-col gap-3 animate-in fade-in">
+                {scenarios.map(s => (
+                  <button
+                    key={s.id}
+                    disabled={!activeCloth || isGenerating}
+                    onClick={(e) => handleGenerate(e, s.id)}
+                    className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
+                      } disabled:opacity-20`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setIsBaseGenerated(false)}
+                  className="mt-4 text-[9px] text-gray-400 uppercase tracking-widest hover:text-black transition-colors"
+                >
+                  ← К выбору одежды
+                </button>
+              </div>
+
+              {resultUrl && (
+                <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-black/5 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddToWardrobe}
+                      className="flex-1 py-3 bg-white border border-black/10 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                      В гардероб
+                    </button>
+                    <button
+                      onClick={handlePublish}
+                      className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                      Опубликовать
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDownload}
+                      className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      Скачать
+                    </button>
+                    <button
+                      onClick={handleShare}
+                      className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                      Поделиться
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Product Info Card in Sidebar */}
@@ -916,12 +915,28 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
           </div>
         )}
 
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 space-y-2 md:space-y-4">
-          {wardrobePosts.map(post => (
-            <div key={post.id} className="break-inside-avoid">
-              <PostCard post={post} onClick={setActiveCloth} onAuthorClick={onNavigateToProfile} hideActions={true} />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+          {wardrobeLoading ? (
+            <div className="col-span-full flex justify-center py-20">
+              <div className="w-8 h-8 border-2 border-black rounded-full animate-spin border-t-transparent"></div>
             </div>
-          ))}
+          ) : wardrobePosts.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center justify-center text-center px-8 py-12 bg-gray-50 rounded-[32px]">
+              <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Здесь пока ничего нет</h3>
+              <p className="text-sm text-gray-500 max-w-md leading-relaxed">
+                После генерации нажмите «В гардероб», чтобы сохранить результат сюда.
+              </p>
+            </div>
+          ) : (
+            wardrobePosts.map(post => (
+              <div key={post.id}>
+                <PostCard post={post} onClick={setActiveCloth} onAuthorClick={onNavigateToProfile} hideActions={true} />
+              </div>
+            ))
+          )}
         </div>
       </div >
     </div >

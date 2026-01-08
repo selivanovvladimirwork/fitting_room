@@ -29,14 +29,6 @@ export interface DigitalTwin {
   stats: UserStats;
 }
 
-export interface Collection {
-  id: string;
-  name: string;
-  items: Post[];
-  coverImage?: string;
-  createdAt: number;
-}
-
 export interface Product {
   id: string;
   name: string;
@@ -60,6 +52,13 @@ export interface Post {
   isPrivate: boolean;
   tags: string[];
   title?: string;
+}
+
+export interface PostGroup {
+  id: string;
+  name: string;
+  posts: Post[];
+  createdAt: number;
 }
 
 export enum Scenario {

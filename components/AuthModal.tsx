@@ -19,6 +19,7 @@ const AuthModal: React.FC = () => {
         name: '',
         nickname: '',
         email: '',
+        phone: '',
         password: '',
         password_confirmation: ''
     });
@@ -44,7 +45,7 @@ const AuthModal: React.FC = () => {
         }
         setIsLoading(true);
         try {
-            await register(registerForm.name, registerForm.nickname, registerForm.email, registerForm.password, registerForm.password_confirmation);
+            await register(registerForm.name, registerForm.nickname, registerForm.email, registerForm.phone, registerForm.password, registerForm.password_confirmation);
         } catch {
             // Error handled in context
         } finally {
@@ -178,6 +179,47 @@ const AuthModal: React.FC = () => {
                                     placeholder="Email"
                                     value={registerForm.email}
                                     onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })}
+                                    className="w-full px-6 py-4 bg-gray-50 border border-transparent focus:border-black/10 focus:bg-white rounded-[24px] outline-none transition-all placeholder:text-gray-400 text-sm"
+                                    required
+                                />
+                                <input
+                                    type="tel"
+                                    placeholder="+7 (___) ___-__-__"
+                                    value={registerForm.phone}
+                                    onChange={e => {
+                                        // RU Phone Mask: +7 (XXX) XXX-XX-XX
+                                        let digits = e.target.value.replace(/\D/g, '');
+
+                                        // Allow clearing
+                                        if (digits.length === 0) {
+                                            setRegisterForm({ ...registerForm, phone: '' });
+                                            return;
+                                        }
+
+                                        // Normalize: 8 -> 7, prepend 7 if missing
+                                        if (digits.startsWith('8')) digits = '7' + digits.slice(1);
+                                        if (!digits.startsWith('7')) digits = '7' + digits;
+                                        digits = digits.slice(0, 11);
+
+                                        // Build formatted string - only add separators when next digits exist
+                                        let formatted = '+7';
+                                        const rest = digits.slice(1); // after the 7
+
+                                        if (rest.length > 0) {
+                                            formatted += ' (' + rest.slice(0, 3);
+                                            if (rest.length > 3) {
+                                                formatted += ') ' + rest.slice(3, 6);
+                                                if (rest.length > 6) {
+                                                    formatted += '-' + rest.slice(6, 8);
+                                                    if (rest.length > 8) {
+                                                        formatted += '-' + rest.slice(8, 10);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        setRegisterForm({ ...registerForm, phone: formatted });
+                                    }}
                                     className="w-full px-6 py-4 bg-gray-50 border border-transparent focus:border-black/10 focus:bg-white rounded-[24px] outline-none transition-all placeholder:text-gray-400 text-sm"
                                     required
                                 />

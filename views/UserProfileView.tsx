@@ -1,7 +1,8 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Post } from '../types';
 import PostCard from '../components/PostCard';
+import { postsApi } from '../services/api';
 
 interface UserProfileViewProps {
   username: string;
@@ -13,17 +14,24 @@ interface UserProfileViewProps {
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({ username, onBack, onSelectPost, onFitPost, onNavigateToProfile }) => {
   const [isFollowing, setIsFollowing] = useState(false);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const userPosts = useMemo<Post[]>(() => [
-    { id: `up1-${username}`, imageUrl: `https://picsum.photos/seed/${username}1/800/1200`, author: username, likes: 1200, isPrivate: false, tags: ['Style'] },
-    { id: `up2-${username}`, imageUrl: `https://picsum.photos/seed/${username}2/800/1000`, author: username, likes: 800, isPrivate: false, tags: ['Daily'] },
-    { id: `up3-${username}`, imageUrl: `https://picsum.photos/seed/${username}3/800/1400`, author: username, likes: 2100, isPrivate: false, tags: ['Luxe'] },
-    { id: `up4-${username}`, imageUrl: `https://picsum.photos/seed/${username}4/800/900`, author: username, likes: 500, isPrivate: false, tags: ['Classic'] },
-    { id: `up5-${username}`, imageUrl: `https://picsum.photos/seed/${username}5/800/1300`, author: username, likes: 1540, isPrivate: false, tags: ['Fashion'] },
-    { id: `up6-${username}`, imageUrl: `https://picsum.photos/seed/${username}6/800/1100`, author: username, likes: 890, isPrivate: false, tags: ['Modern'] },
-    { id: `up7-${username}`, imageUrl: `https://picsum.photos/seed/${username}7/800/800`, author: username, likes: 430, isPrivate: false, tags: ['Street'] },
-    { id: `up8-${username}`, imageUrl: `https://picsum.photos/seed/${username}8/800/1500`, author: username, likes: 3200, isPrivate: false, tags: ['Art'] },
-  ], [username]);
+  useEffect(() => {
+    const loadUserPosts = async () => {
+      setIsLoading(true);
+      try {
+        const posts = await postsApi.getByUser(username);
+        setUserPosts(posts);
+      } catch (error) {
+        console.error('Failed to load user posts:', error);
+        setUserPosts([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadUserPosts();
+  }, [username]);
 
   return (
     <div className="w-full pb-12 pt-16 px-1 md:px-6 max-w-7xl mx-auto animate-in fade-in duration-1000">
@@ -48,17 +56,17 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ username, onBack, onS
         </button>
       </div>
 
-      {/* Masonry Grid for Profile - Adjusted gap for mobile */}
-      <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
         {userPosts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            onClick={(p) => onSelectPost(p, userPosts)}
-            onFitClick={(e, p) => onFitPost(p)}
-            onAuthorClick={onNavigateToProfile}
-            hideActions={true}
-          />
+          <div key={post.id}>
+            <PostCard
+              post={post}
+              onClick={(p) => onSelectPost(p, userPosts)}
+              onFitClick={(e, p) => onFitPost(p)}
+              onAuthorClick={onNavigateToProfile}
+              hideActions={true}
+            />
+          </div>
         ))}
       </div>
     </div>

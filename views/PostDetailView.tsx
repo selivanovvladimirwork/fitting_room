@@ -2,6 +2,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Post } from '../types';
 import PostCard from '../components/PostCard';
+import { profileApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 interface PostDetailViewProps {
   post: Post;
@@ -13,13 +15,55 @@ interface PostDetailViewProps {
 }
 
 const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigate, onSelectPost, onNavigateToProfile, onFit }) => {
+  const { requireAuth, isAuthenticated } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [likesCount, setLikesCount] = useState(post.likes || 0);
 
   const touchStart = useRef<number | null>(null);
   const touchEnd = useRef<number | null>(null);
   const minSwipeDistance = 50;
+
+  const handleLike = () => {
+    requireAuth(async () => {
+      try {
+        if (isLiked) {
+          const result = await profileApi.unlikePost(post.id);
+          setLikesCount(result.likes);
+        } else {
+          const result = await profileApi.likePost(post.id);
+          setLikesCount(result.likes);
+        }
+        setIsLiked(!isLiked);
+      } catch (error) {
+        console.error('Like error:', error);
+      }
+    });
+  };
+
+  const handleSave = () => {
+    requireAuth(async () => {
+      try {
+        if (isSaved) {
+          await profileApi.unsavePost(post.id);
+        } else {
+          await profileApi.savePost(post.id);
+        }
+        setIsSaved(!isSaved);
+      } catch (error) {
+        console.error('Save error:', error);
+      }
+    });
+  };
+
+  const handleFollow = () => {
+    requireAuth(async () => {
+      // Note: We need author's user ID, not username. For now, just toggle UI.
+      // Backend would need to resolve username to ID or accept username.
+      setIsFollowing(!isFollowing);
+    });
+  };
 
   const authorStats = useMemo(() => ({
     height: 178 + Math.floor(Math.random() * 10),
@@ -40,7 +84,12 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [post.id]);
+    // Reset states when post changes
+    setIsLiked(false);
+    setIsSaved(false);
+    setIsFollowing(false);
+    setLikesCount(post.likes || 0);
+  }, [post.id, post.likes]);
 
   const productName = useMemo(() => {
     if (post.tags && post.tags.length > 0) return post.tags[0];
@@ -70,14 +119,15 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
   };
 
   const handleShare = () => {
+    const shareUrl = `${window.location.origin}/post/${post.id}`;
     if (navigator.share) {
       navigator.share({
         title: 'Примерочная Studio',
         text: `Посмотрите на этот образ от ${post.author}!`,
-        url: window.location.href,
+        url: shareUrl,
       }).catch(console.error);
     } else {
-      navigator.clipboard.writeText(window.location.href);
+      navigator.clipboard.writeText(shareUrl);
       alert('Ссылка скопирована в буфер обмена');
     }
   };
@@ -104,7 +154,7 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
           </button>
         </div>
         <button
-          onClick={() => setIsFollowing(!isFollowing)}
+          onClick={handleFollow}
           className={`w-full md:w-auto px-10 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all duration-300 shadow-xl active:scale-95 ${isFollowing ? 'bg-gray-100 text-gray-400 border border-transparent' : 'bg-black text-white border border-white/20 hover:bg-gray-900'
             }`}
         >
@@ -153,54 +203,54 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
 
         {/* Sidebar Controls */}
         <div className="w-full md:w-[450px] flex flex-col shrink-0">
-          <div className="liquid-glass p-8 md:p-12 rounded-[40px] md:rounded-[60px] shadow-xl border border-white h-full flex flex-col">
-            <div className="mb-8 md:mb-12">
-              <h3 className="text-3xl md:text-4xl font-light tracking-tight uppercase tracking-widest mb-6 md:mb-8">{productName}</h3>
+          <div className="liquid-glass p-6 md:p-8 rounded-[30px] md:rounded-[40px] shadow-xl border border-white h-full flex flex-col">
+            <div className="mb-6 md:mb-8">
+              <h3 className="text-2xl md:text-3xl font-light tracking-tight uppercase tracking-widest mb-4 md:mb-6">{productName}</h3>
 
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => setIsLiked(!isLiked)}
-                  className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full transition-all ${isLiked ? 'text-[#FF4D4D] fill-[#FF4D4D]' : 'text-black'}`}
+                  onClick={handleLike}
+                  className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full transition-all ${isLiked ? 'text-[#FF4D4D] fill-[#FF4D4D]' : 'text-black'}`}
                 >
-                  <svg className="w-6 h-6 md:w-8 md:h-8" fill={isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 md:w-6 md:h-6" fill={isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                     <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                   </svg>
                 </button>
                 <button
-                  onClick={() => setIsSaved(!isSaved)}
-                  className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full transition-all ${isSaved ? 'text-black fill-black' : 'text-black'}`}
+                  onClick={handleSave}
+                  className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full transition-all ${isSaved ? 'text-black fill-black' : 'text-black'}`}
                 >
-                  <svg className="w-6 h-6 md:w-8 md:h-8" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 md:w-6 md:h-6" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                   </svg>
                 </button>
                 <button
                   onClick={handleShare}
-                  className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full text-black transition-all"
+                  className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full text-black transition-all"
                 >
-                  <svg className="w-6 h-6 md:w-8 md:h-8" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
                   </svg>
                 </button>
               </div>
             </div>
 
-            <div className="space-y-4 md:space-y-6 mb-8 md:mb-auto">
-              <div className="flex justify-between items-center py-4 md:py-6 border-b border-black/5">
+            <div className="space-y-3 md:space-y-4 mb-6 md:mb-auto">
+              <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
                 <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Рост</span>
                 <span className="text-base md:text-lg font-light">{authorStats.height} см</span>
               </div>
-              <div className="flex justify-between items-center py-4 md:py-6 border-b border-black/5">
+              <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
                 <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Вес</span>
                 <span className="text-base md:text-lg font-light">{authorStats.weight} кг</span>
               </div>
-              <div className="flex justify-between items-center py-4 md:py-6 border-b border-black/5">
+              <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
                 <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Талия</span>
                 <span className="text-base md:text-lg font-light">{authorStats.waist} см</span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 md:gap-4 mt-8 md:mt-12">
+            <div className="flex flex-col gap-3 md:gap-3 mt-6 md:mt-8">
               <button
                 onClick={() => onFit(post)}
                 className="w-full py-3 bg-black text-white border border-white/20 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-xl hover:bg-gray-900 active:scale-95 transition-all duration-300"
@@ -218,16 +268,17 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
       {/* Similar Items - Adjusted gap for mobile */}
       <div className="mt-24 md:mt-40">
         <h2 className="text-3xl md:text-5xl font-thin tracking-widest uppercase mb-10 md:mb-16 px-1">Похожие образы</h2>
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
           {similarPosts.map((p) => (
-            <PostCard
-              key={p.id}
-              post={p}
-              onClick={(post) => onSelectPost(post, similarPosts)}
-              onFitClick={(e, p) => onFit(p)}
-              onAuthorClick={onNavigateToProfile}
-              hideActions={true}
-            />
+            <div key={p.id}>
+              <PostCard
+                post={p}
+                onClick={(post) => onSelectPost(post, similarPosts)}
+                onFitClick={(e, p) => onFit(p)}
+                onAuthorClick={onNavigateToProfile}
+                hideActions={true}
+              />
+            </div>
           ))}
         </div>
       </div>

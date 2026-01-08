@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { View, Post, DigitalTwin, UserStats, Collection } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Post, DigitalTwin, UserStats } from './types';
 import Navigation from './components/Navigation';
 import HomeView from './views/HomeView';
 import AvatarView from './views/AvatarView';
@@ -15,22 +15,48 @@ import UserProfileView from './views/UserProfileView';
 import AuthModal from './components/AuthModal';
 import Notification from './components/Notification';
 import { useAuth } from './context/AuthContext';
-import { avatarsApi, wardrobeApi } from './services/api';
+import { avatarsApi, wardrobeApi, postsApi } from './services/api';
+
+// Route parsing helper
+const parseRoute = (): { view: View; postId?: string; username?: string } => {
+  const path = window.location.pathname;
+
+  // /post/ID
+  if (path.startsWith('/post/')) {
+    const postId = path.replace('/post/', '');
+    return { view: View.POST_DETAIL, postId };
+  }
+
+  // /@username
+  if (path.startsWith('/@')) {
+    const username = path.replace('/@', '');
+    return { view: View.USER_PROFILE, username };
+  }
+
+  // Static routes
+  const routes: Record<string, View> = {
+    '/': View.FEED,
+    '/home': View.HOME,
+    '/avatar': View.AVATAR,
+    '/settings': View.SETTINGS,
+    '/subscription': View.SUBSCRIPTION,
+    '/avatar-settings': View.AVATAR_SETTINGS,
+  };
+
+  return { view: routes[path] || View.FEED };
+};
 
 const App: React.FC = () => {
   const { requireAuth, logout, user, isAuthenticated, isNewUser } = useAuth();
-  const [currentView, setCurrentView] = useState<View>(View.FEED); // Default to Search
 
-  // Redirect new users to Avatar Settings
-  useEffect(() => {
-    if (isAuthenticated && isNewUser) {
-      setCurrentView(View.AVATAR_SETTINGS);
-    }
-  }, [isAuthenticated, isNewUser]);
+  // Parse initial route
+  const initialRoute = parseRoute();
+  const [currentView, setCurrentView] = useState<View>(initialRoute.view);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [currentPostList, setCurrentPostList] = useState<Post[]>([]);
-  const [activeProfileUser, setActiveProfileUser] = useState<string | null>(null);
+  const [activeProfileUser, setActiveProfileUser] = useState<string | null>(initialRoute.username || null);
   const [fittingPost, setFittingPost] = useState<Post | null>(null);
+  const [routePostId, setRoutePostId] = useState<string | null>(initialRoute.postId || null);
 
   // Manage multiple avatars - теперь с поддержкой API
   const [avatars, setAvatars] = useState<DigitalTwin[]>([]);
@@ -122,58 +148,84 @@ const App: React.FC = () => {
     }
   };
 
-  // Modals Data
-  const [showCreateCollectionModal, setShowCreateCollectionModal] = useState(false);
-  const [postToCollect, setPostToCollect] = useState<Post | null>(null);
-
   const handleSavePost = (post: Post) => {
-    setPostToCollect(post);
-  };
-
-  const handleAddToCollection = (collectionId: string, post: Post) => {
-    setCollections(prev => prev.map(c => {
-      if (c.id === collectionId) {
-        // Avoid duplicates if needed, or allow
-        if (c.items.some(p => p.id === post.id)) return c;
-        return { ...c, items: [post, ...c.items] };
-      }
-      return c;
-    }));
-    setPostToCollect(null);
+    // Placeholder for future save functionality
   };
 
   const activeAvatar = avatars.find(a => a.id === activeAvatarId);
-  // Maintain backward compatibility for props expecting simple string[] for now, or update them
+  // Maintain backward compatibility for props expecting simple string[] for now
   const currentReferenceImages = activeAvatar ? activeAvatar.referenceImages : [];
 
-  // Manage Collections
-  const [collections, setCollections] = useState<Collection[]>(() => {
-    const saved = localStorage.getItem('user_collections');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  // Redirect new users to Avatar Settings
   useEffect(() => {
-    localStorage.setItem('user_collections', JSON.stringify(collections));
-  }, [collections]);
+    if (isAuthenticated && isNewUser) {
+      setCurrentView(View.AVATAR_SETTINGS);
+    }
+  }, [isAuthenticated, isNewUser]);
 
-  const handleCreateCollection = (name: string) => {
-    const newCollection: Collection = {
-      id: `col-${Date.now()}`,
-      name,
-      items: [],
-      createdAt: Date.now()
+  // Load post from URL if routePostId is set
+  useEffect(() => {
+    const loadPostFromRoute = async () => {
+      if (routePostId && !selectedPost) {
+        try {
+          const post = await postsApi.getOne(routePostId);
+          if (post) {
+            setSelectedPost(post);
+            setCurrentView(View.POST_DETAIL);
+          }
+        } catch (error) {
+          console.error('Failed to load post from URL:', error);
+          setCurrentView(View.FEED);
+        }
+        setRoutePostId(null);
+      }
     };
-    setCollections(prev => [newCollection, ...prev]);
-  };
+    loadPostFromRoute();
+  }, [routePostId, selectedPost]);
 
-  const handleDeleteCollection = (id: string) => {
-    setCollections(prev => prev.filter(c => c.id !== id));
-  };
-
-  // Scroll to top on view change
+  // Update URL when view changes
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [currentView]);
+
+    const routeMap: Partial<Record<View, string>> = {
+      [View.FEED]: '/',
+      [View.HOME]: '/home',
+      [View.AVATAR]: '/avatar',
+      [View.SETTINGS]: '/settings',
+      [View.SUBSCRIPTION]: '/subscription',
+      [View.AVATAR_SETTINGS]: '/avatar-settings',
+    };
+
+    let newPath = routeMap[currentView] || '/';
+
+    if (currentView === View.POST_DETAIL && selectedPost) {
+      newPath = `/post/${selectedPost.id}`;
+    } else if (currentView === View.USER_PROFILE && activeProfileUser) {
+      newPath = `/@${activeProfileUser.replace('@', '')}`;
+    }
+
+    // Only update if path changed
+    if (window.location.pathname !== newPath) {
+      window.history.pushState({}, '', newPath);
+    }
+  }, [currentView, selectedPost, activeProfileUser]);
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = parseRoute();
+      setCurrentView(route.view);
+      if (route.postId) {
+        setRoutePostId(route.postId);
+      }
+      if (route.username) {
+        setActiveProfileUser(route.username);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const handleSelectPost = (post: Post, list: Post[]) => {
     setSelectedPost(post);
@@ -261,9 +313,6 @@ const App: React.FC = () => {
           onUpdateAvatar={handleUpdateAvatar}
           onDeleteAvatar={handleDeleteAvatar}
           onSetActiveAvatar={setActiveAvatarId}
-          collections={collections}
-          onOpenCreateCollection={() => setShowCreateCollectionModal(true)}
-          onDeleteCollection={handleDeleteCollection}
           onSavePost={handleSavePost}
         />
       );
@@ -307,7 +356,12 @@ const App: React.FC = () => {
         />
       );
       case View.POST_DETAIL:
-        return selectedPost ? (
+        if (!selectedPost) {
+          // No post selected - redirect to feed
+          setTimeout(() => setCurrentView(View.FEED), 0);
+          return <FeedView onSelectPost={handleSelectPost} onFitPost={handleFitAction} onNavigateToProfile={handleNavigateToProfile} />;
+        }
+        return (
           <PostDetailView
             post={selectedPost}
             onBack={() => setCurrentView(View.FEED)}
@@ -316,7 +370,7 @@ const App: React.FC = () => {
             onNavigateToProfile={handleNavigateToProfile}
             onFit={handleFitAction}
           />
-        ) : <FeedView onSelectPost={handleSelectPost} onFitPost={handleFitAction} onNavigateToProfile={handleNavigateToProfile} />;
+        );
       default: return <FeedView onSelectPost={handleSelectPost} onFitPost={handleFitAction} onNavigateToProfile={handleNavigateToProfile} />;
     }
   };
@@ -348,104 +402,6 @@ const App: React.FC = () => {
           </button>
         </div>
       </div>
-      {/* Create Collection Modal */}
-      {showCreateCollectionModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-[32px] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-6 text-center">Новая группа</h3>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Название..."
-              className="w-full bg-gray-50 border-none rounded-xl p-4 font-bold mb-6 focus:ring-2 focus:ring-black transition-all"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCreateCollection((e.target as HTMLInputElement).value);
-                  setShowCreateCollectionModal(false);
-                }
-              }}
-              id="new-collection-name"
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowCreateCollectionModal(false)}
-                className="flex-1 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] bg-gray-100 hover:bg-gray-200 transition-colors"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={() => {
-                  const input = document.getElementById('new-collection-name') as HTMLInputElement;
-                  if (input?.value) {
-                    handleCreateCollection(input.value);
-                    setShowCreateCollectionModal(false);
-                  }
-                }}
-                className="flex-1 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] bg-black text-white hover:bg-gray-900 transition-colors"
-              >
-                Создать
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add To Collection Modal */}
-      {postToCollect && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-[32px] p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 h-[500px] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold">Сохранить в...</h3>
-              <button onClick={() => setPostToCollect(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto -mx-2 px-2 space-y-2 mb-4 scrollbar-hide">
-              <button
-                onClick={() => {
-                  setShowCreateCollectionModal(true);
-                  // Keep postToCollect active so we can add to it after creation? 
-                  // Currently simplistic: Create, then user has to click save again or I handle logic.
-                  // User flow: Click Create -> Create -> Modal closes -> Add to Collection Modal still open?
-                  // Yes, showCreateCollectionModal stacks on top.
-                }}
-                className="w-full p-4 rounded-[24px] border-2 border-dashed border-gray-200 flex items-center gap-4 hover:border-black hover:bg-gray-50 transition-all group shrink-0"
-              >
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-white text-gray-400 group-hover:text-black transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                </div>
-                <span className="font-bold text-sm text-gray-400 group-hover:text-black">Новая группа</span>
-              </button>
-
-              {collections.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => handleAddToCollection(c.id, postToCollect)}
-                  className="w-full p-4 rounded-[24px] bg-gray-50 flex items-center gap-4 hover:bg-black hover:text-white transition-all group shrink-0"
-                >
-                  <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shrink-0 border border-gray-100 text-black">
-                    {c.items.length > 0 && c.items[0].imageUrl ? (
-                      <img src={c.items[0].imageUrl} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                    )}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <h4 className="font-bold text-sm line-clamp-1">{c.name}</h4>
-                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-60">{c.items.length} фото</p>
-                  </div>
-                  {c.items.some(p => p.id === postToCollect.id) && (
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {notification && (
         <Notification

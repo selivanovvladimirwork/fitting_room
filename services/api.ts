@@ -49,11 +49,11 @@ export const authApi = {
         return data;
     },
 
-    async register(name: string, nickname: string, email: string, password: string, password_confirmation: string) {
+    async register(name: string, nickname: string, email: string, phone: string, password: string, password_confirmation: string) {
         const response = await fetch(`${API_BASE}/register`, {
             method: 'POST',
             headers: getHeaders(),
-            body: JSON.stringify({ name, nickname, email, password, password_confirmation }),
+            body: JSON.stringify({ name, nickname, email, phone, password, password_confirmation }),
         });
         const data = await handleResponse<{ user: any; token: string }>(response);
         localStorage.setItem('auth_token', data.token);
@@ -108,6 +108,15 @@ export const postsApi = {
         return handleResponse<any>(response);
     },
 
+    async getByUser(username: string) {
+        // Remove @ if present
+        const cleanUsername = username.replace('@', '');
+        const response = await fetch(`${API_BASE}/users/${cleanUsername}/posts`, {
+            headers: getHeaders(),
+        });
+        return handleResponse<any[]>(response);
+    },
+
     async create(data: { image_url: string; title?: string; tags?: string[]; is_private?: boolean }) {
         const response = await fetch(`${API_BASE}/posts`, {
             method: 'POST',
@@ -154,11 +163,11 @@ export const avatarsApi = {
     },
 };
 
-// ==================== Wardrobe API ====================
+// ==================== Wardrobe API (Personal Items) ====================
 export const wardrobeApi = {
     async getAll() {
         const response = await fetch(`${API_BASE}/wardrobe`, {
-            headers: getHeaders(),
+            headers: getHeaders(true), // Requires auth
         });
         return handleResponse<any[]>(response);
     },
@@ -183,6 +192,16 @@ export const wardrobeApi = {
     },
 };
 
+// ==================== Catalog API (System Products) ====================
+export const catalogApi = {
+    async getAll() {
+        const response = await fetch(`${API_BASE}/catalog`, {
+            headers: getHeaders(),
+        });
+        return handleResponse<any[]>(response);
+    },
+};
+
 // ==================== Generation API ====================
 export const generationApi = {
     async generateImage(data: { model: string; messages: any[] }) {
@@ -195,9 +214,133 @@ export const generationApi = {
     },
 };
 
+// ==================== Post Groups API ====================
+export const postGroupsApi = {
+    async getAll() {
+        const response = await fetch(`${API_BASE}/post-groups`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async create(data: { name: string; posts: any[] }) {
+        const response = await fetch(`${API_BASE}/post-groups`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify(data),
+        });
+        return handleResponse<any>(response);
+    },
+
+    async update(id: string, data: { name?: string; posts?: any[] }) {
+        const response = await fetch(`${API_BASE}/post-groups/${id}`, {
+            method: 'PUT',
+            headers: getHeaders(true),
+            body: JSON.stringify(data),
+        });
+        return handleResponse<any>(response);
+    },
+
+    async delete(id: string) {
+        const response = await fetch(`${API_BASE}/post-groups/${id}`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ success: boolean }>(response);
+    },
+
+    async sync(groups: any[]) {
+        const response = await fetch(`${API_BASE}/post-groups/sync`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify({ groups }),
+        });
+        return handleResponse<any[]>(response);
+    },
+};
+
+// ==================== Profile Data API ====================
+export const profileApi = {
+    async getMyPosts() {
+        const response = await fetch(`${API_BASE}/profile/posts`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async getFollowing() {
+        const response = await fetch(`${API_BASE}/profile/following`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async getSavedPosts() {
+        const response = await fetch(`${API_BASE}/profile/saved`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async getLikedPosts() {
+        const response = await fetch(`${API_BASE}/profile/liked`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async likePost(postId: string | number) {
+        const response = await fetch(`${API_BASE}/posts/${postId}/like`, {
+            method: 'POST',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string; likes: number }>(response);
+    },
+
+    async unlikePost(postId: string | number) {
+        const response = await fetch(`${API_BASE}/posts/${postId}/like`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string; likes: number }>(response);
+    },
+
+    async savePost(postId: string | number) {
+        const response = await fetch(`${API_BASE}/posts/${postId}/save`, {
+            method: 'POST',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string }>(response);
+    },
+
+    async unsavePost(postId: string | number) {
+        const response = await fetch(`${API_BASE}/posts/${postId}/save`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string }>(response);
+    },
+
+    async followUser(userId: string | number) {
+        const response = await fetch(`${API_BASE}/users/${userId}/follow`, {
+            method: 'POST',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string }>(response);
+    },
+
+    async unfollowUser(userId: string | number) {
+        const response = await fetch(`${API_BASE}/users/${userId}/follow`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string }>(response);
+    },
+};
+
 // ==================== Migration API ====================
 export const migrationApi = {
-    async migrateLocalData(data: { avatars?: any[]; wardrobe?: any[]; collections?: any[] }) {
+    async migrateLocalData(data: { avatars?: any[]; wardrobe?: any[] }) {
         const response = await fetch(`${API_BASE}/migrate-local-data`, {
             method: 'POST',
             headers: getHeaders(true),
@@ -214,12 +357,10 @@ export async function migrateLocalStorageToApi(): Promise<void> {
 
     const avatars = localStorage.getItem('user_avatars_v2');
     const wardrobe = localStorage.getItem('fitting_room_wardrobe');
-    const collections = localStorage.getItem('user_collections');
 
     const data: any = {};
     if (avatars) data.avatars = JSON.parse(avatars);
     if (wardrobe) data.wardrobe = JSON.parse(wardrobe);
-    if (collections) data.collections = JSON.parse(collections);
 
     if (Object.keys(data).length > 0) {
         try {
@@ -229,7 +370,6 @@ export async function migrateLocalStorageToApi(): Promise<void> {
             localStorage.removeItem('user_avatars_v2');
             localStorage.removeItem('user_avatars');
             localStorage.removeItem('fitting_room_wardrobe');
-            localStorage.removeItem('user_collections');
             localStorage.removeItem('active_avatar_id');
 
             localStorage.setItem('api_migration_done', 'true');
@@ -247,6 +387,7 @@ export default {
     posts: postsApi,
     avatars: avatarsApi,
     wardrobe: wardrobeApi,
+    catalog: catalogApi,
     migration: migrationApi,
     generation: generationApi,
     migrateLocalStorageToApi,

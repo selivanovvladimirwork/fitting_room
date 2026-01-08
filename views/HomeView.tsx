@@ -17,32 +17,13 @@ interface HomeViewProps {
   onSavePost?: (post: Post) => void;
 }
 
-// Fallback mock data
-const MOCK_WARDROBE: Post[] = [
-  { id: 'fit-1', imageUrl: '/mock/div_1_silk_dress_asian_1767457702563.png', author: 'Gucci', title: 'Шелковое вечернее платье', likes: 0, isPrivate: false, tags: ['Virtual Fit'] },
-  { id: 'fit-2', imageUrl: '/mock/div_2_denim_black_male_1767457717602.png', author: "Levi's", title: 'Винтажная джинсовая куртка', likes: 0, isPrivate: false, tags: ['Virtual Fit'] },
-  { id: 'fit-3', imageUrl: '/mock/div_3_trench_redhead_1767457730112.png', author: 'Burberry', title: 'Классический тренч', likes: 0, isPrivate: false, tags: ['Virtual Fit'] },
-  { id: 'fit-4', imageUrl: '/mock/div_4_yoga_latina_1767457754254.png', author: 'Alo Yoga', title: 'Спортивный костюм', likes: 0, isPrivate: false, tags: ['Virtual Fit'] },
-  { id: 'fit-5', imageUrl: '/mock/div_5_business_white_male_1767457767827.png', author: 'Hugo Boss', title: 'Деловой костюм', likes: 0, isPrivate: false, tags: ['Virtual Fit'] },
-  { id: 'fit-6', imageUrl: '/mock/div_6_boho_black_female_1767457782503.png', author: 'Free People', title: 'Платье в стиле Бохо', likes: 0, isPrivate: false, tags: ['Virtual Fit'] },
-];
-
-const MOCK_POSTS: Post[] = [
-  { id: 'h1', imageUrl: '/mock/uploaded_image_0_1767382693233.png', author: '@vogue_edge', likes: 3200, isPrivate: false, tags: ['Minimal'] },
-  { id: 'h2', imageUrl: '/mock/uploaded_image_1_1767382693233.png', author: '@urban_knight', likes: 1150, isPrivate: false, tags: ['Techwear'] },
-  { id: 'h3', imageUrl: '/mock/uploaded_image_2_1767382693233.png', author: '@luxe_daily', likes: 2800, isPrivate: false, tags: ['Silk'] },
-  { id: 'h4', imageUrl: '/mock/uploaded_image_3_1767382693233.png', author: '@nordic_style', likes: 940, isPrivate: false, tags: ['Scandi'] },
-  { id: 'h5', imageUrl: '/mock/uploaded_image_4_1767382693233.png', author: '@office_chic', likes: 1500, isPrivate: false, tags: ['Business'] },
-  { id: 'h6', imageUrl: '/mock/uploaded_image_0_1767382807800.png', author: '@denim_cult', likes: 2100, isPrivate: false, tags: ['Casual'] },
-  { id: 'h7', imageUrl: '/mock/uploaded_image_1_1767382807800.png', author: '@fit_life', likes: 3400, isPrivate: false, tags: ['Sport'] },
-  { id: 'h8', imageUrl: '/mock/uploaded_image_2_1767382807800.png', author: '@autumn_vibes', likes: 1800, isPrivate: false, tags: ['Outerwear'] },
-  { id: 'h9', imageUrl: '/mock/uploaded_image_3_1767382807800.png', author: '@boho_soul', likes: 2200, isPrivate: false, tags: ['Boho'] },
-];
+// Mock data removed - all posts come from API
 
 const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFittingPost?: Post | null }> = ({ onStart, onSelectPost, onFitPost, onNavigateToProfile, userReferences, initialFittingPost, avatars, activeAvatarId, onSetActiveAvatar, onSavePost }) => {
-  const { isAuthenticated, requireAuth } = useAuth();
-  const [showGeneration, setShowGeneration] = useState(false);
-  const [curatedPosts, setCuratedPosts] = useState<Post[]>(MOCK_POSTS);
+  const { isAuthenticated, requireAuth, user } = useAuth();
+  const [showGeneration, setShowGeneration] = useState(true);
+  const [curatedPosts, setCuratedPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Handle external initial fitting post
   useEffect(() => {
@@ -66,8 +47,8 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
     }
   }, [initialFittingPost]);
 
-  // 1. Dynamic Wardrobe - load from API with fallback
-  const [wardrobe, setWardrobe] = useState<Post[]>(MOCK_WARDROBE);
+  // 1. Dynamic Wardrobe - load from API
+  const [wardrobe, setWardrobe] = useState<Post[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -76,10 +57,14 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
           wardrobeApi.getAll().catch(() => []),
           postsApi.getAll().catch(() => []),
         ]);
-        if (wardrobeData.length > 0) setWardrobe(wardrobeData);
-        if (postsData.length > 0) setCuratedPosts(postsData);
+        setWardrobe(wardrobeData);
+        setCuratedPosts(postsData); // Только данные из API
       } catch (error) {
-        console.log('API unavailable, using mock data');
+        console.log('API unavailable');
+        setWardrobe([]);
+        setCuratedPosts([]);
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
@@ -94,7 +79,7 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
       if (fittingQueue.some(p => p.id === item.id)) {
         setFittingQueue([]);
         setSelectedFittingItem(null);
-        setShowGeneration(false);
+        // Do not hide generation block
         return;
       }
 
@@ -108,7 +93,7 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
   const removeFromQueue = (id: string) => {
     setFittingQueue([]);
     setSelectedFittingItem(null);
-    setShowGeneration(false);
+    // Do not hide generation block
   };
 
   const [selectedFittingItem, setSelectedFittingItem] = useState<Post | null>(null);
@@ -173,7 +158,7 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
       <div className="mb-12 mt-4 animate-in fade-in slide-in-from-top-4 duration-700">
         {isAuthenticated ? (
           <>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">@ioniua</h1>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">@{user?.nickname || user?.name || 'user'}</h1>
             <div className="h-1 w-24 bg-black mb-4 rounded-full"></div>
             <p className="text-gray-500 max-w-md text-sm md:text-base leading-relaxed">
               Добро пожаловать в вашу цифровую гардеробную. Здесь хранятся ваши образы, история примерок и вдохновение.
@@ -228,7 +213,21 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
             )}
 
             <div className="flex h-full transition-transform duration-700 ease-in-out gap-2" style={{ transform: `translateX(-${currentSlide * (100 / (window.innerWidth < 768 ? 1.2 : 3))}%)` }}>
-              {wardrobe.map(item => (
+              {isLoading ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
+                </div>
+              ) : wardrobe.length === 0 ? (
+                <div className="w-full h-full flex flex-col items-center justify-center text-center px-8 bg-gray-50 rounded-[24px]">
+                  <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">Ваш гардероб пуст</h3>
+                  <p className="text-sm text-gray-500 max-w-md leading-relaxed">
+                    Добавьте вещи через кнопку <strong>«+»</strong> слева или нажмите на любой образ в ленте и выберите <strong>«Примерить»</strong>
+                  </p>
+                </div>
+              ) : wardrobe.map(item => (
                 <div key={item.id} onClick={() => handleAddToQueue(item)} className={`min-w-[80%] md:min-w-[32%] h-full relative rounded-[24px] md:rounded-[32px] overflow-hidden group cursor-pointer transition-all ${fittingQueue.some(p => p.id === item.id) ? 'ring-4 ring-black ring-inset' : ''}`}>
                   <img src={item.imageUrl} alt="" className="w-full h-full object-cover absolute inset-0 md:bg-center transition-transform duration-700 ease-out group-hover:scale-110" />
                   <div className="absolute inset-0 group-hover:bg-black/10 transition-all duration-500"></div>
@@ -267,20 +266,26 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
       {/* 4. Recommendations */}
       <div className="mb-20">
         <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase mb-10 border-b border-gray-100 pb-4">Рекомендации</h2>
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 space-y-2 md:space-y-4 w-full">
-          {curatedPosts.map((post) => (
-            <div key={post.id} className="break-inside-avoid mb-4">
-              <PostCard
-                post={post}
-                onClick={(p) => onFitPost(p)}
-                onFitClick={(e, p) => onFitPost(p)}
-                onAuthorClick={onNavigateToProfile}
-                onSaveClick={(p) => onSavePost && onSavePost(p)}
-                hideActions={true}
-              />
-            </div>
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 w-full">
+            {curatedPosts.map((post) => (
+              <div key={post.id}>
+                <PostCard
+                  post={post}
+                  onClick={(p) => onFitPost(p)}
+                  onFitClick={(e, p) => onFitPost(p)}
+                  onAuthorClick={onNavigateToProfile}
+                  onSaveClick={(p) => onSavePost && onSavePost(p)}
+                  hideActions={true}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ const MOCK_POSTS: Post[] = [
 
 const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigateToProfile }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [allPosts, setAllPosts] = useState<Post[]>(MOCK_POSTS);
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load posts from API
@@ -33,11 +33,10 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
     const loadPosts = async () => {
       try {
         const posts = await postsApi.getAll();
-        if (posts.length > 0) {
-          setAllPosts(posts);
-        }
+        setAllPosts(posts.length > 0 ? posts : MOCK_POSTS);
       } catch (error) {
         console.log('API unavailable, using mock data');
+        setAllPosts(MOCK_POSTS);
       } finally {
         setIsLoading(false);
       }
@@ -93,10 +92,15 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
         )}
       </div>
 
-      {filteredPosts.length > 0 ? (
-        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 space-y-4 w-full px-1 md:px-0">
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-40">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
+          <p className="mt-4 text-sm text-gray-400">Загрузка...</p>
+        </div>
+      ) : filteredPosts.length > 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 w-full px-1 md:px-0">
           {filteredPosts.map(post => (
-            <div key={post.id} className="break-inside-avoid mb-4">
+            <div key={post.id}>
               <PostCard
                 post={post}
                 onClick={(p) => onSelectPost(p, filteredPosts)}
