@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Scenario, Post, DigitalTwin } from '../types';
 import PostCard from '../components/PostCard';
 import { generationApi, wardrobeApi, postsApi } from '../services/api';
+import Notification from '../components/Notification';
 
 interface VirtualFitViewProps {
   initialPost?: Post | null;
@@ -186,6 +187,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     const saved = localStorage.getItem('generation_history');
     return saved ? JSON.parse(saved) : [];
   });
+  const [notification, setNotification] = useState<{ message: string } | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
 
   // Save history to localStorage when it changes
@@ -465,11 +467,11 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       if (onSavePost) {
         onSavePost(newItem);
       } else {
-        alert('Образ сохранен в ваш гардероб!');
+        setNotification({ message: 'Образ сохранен в гардероб' });
       }
     } catch (e) {
       console.error('Failed to add to wardrobe:', e);
-      alert('Ошибка сохранения. Пожалуйста, авторизуйтесь.');
+      setNotification({ message: 'Ошибка: Необходима авторизация' });
     }
   };
 
@@ -484,10 +486,10 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         is_private: false
       });
 
-      alert('Образ опубликован в ленте!');
+      setNotification({ message: 'Образ опубликован в ленте' });
     } catch (e) {
       console.error('Failed to publish:', e);
-      alert('Ошибка публикации. Пожалуйста, авторизуйтесь.');
+      setNotification({ message: 'Ошибка: Необходима авторизация' });
     }
   };
 
@@ -939,6 +941,16 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
           )}
         </div>
       </div >
+
+
+      {
+        notification && (
+          <Notification
+            message={notification.message}
+            onClose={() => setNotification(null)}
+          />
+        )
+      }
     </div >
   );
 };

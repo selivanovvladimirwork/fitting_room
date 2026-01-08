@@ -4,9 +4,9 @@
  */
 
 // Автоопределение: локалка или продакшен
-const API_BASE = window.location.hostname === 'fittingroom.loc' 
+const API_BASE = window.location.hostname === 'fittingroom.loc'
     ? 'https://fittingadmin.loc/api'
-    : 'https://adminfittingroom.fixers.su/api';
+    : 'https://adminfittingroom.fixers.su/public/api';
 
 // Получить токен из localStorage
 const getToken = (): string | null => {

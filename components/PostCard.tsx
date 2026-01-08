@@ -110,11 +110,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick, onFitClick, onAuthor
               onClick={handleAuthorClick}
               className="text-white text-base font-medium tracking-tight mb-0.5 truncate hover:underline underline-offset-4 cursor-pointer"
             >
-              {post.author}
+              {post.author?.startsWith('@') ? post.author : `@${post.author}`}
             </h3>
-            <p className="text-white/70 text-[10px] font-light uppercase tracking-widest">
-              AI-generated style • Premium Fit
-            </p>
+            {post.title && (
+              <p className="text-white/70 text-[10px] font-light uppercase tracking-widest">
+                {post.title}
+              </p>
+            )}
           </div>
 
           {!hideActions && (
@@ -143,9 +145,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick, onFitClick, onAuthor
               onClick={handleAuthorClick}
               className="text-sm font-bold text-black leading-tight mb-1 truncate max-w-[140px] active:text-gray-600"
             >
-              {post.author}
+              {post.author?.startsWith('@') ? post.author : `@${post.author}`}
             </h3>
-            <p className="text-[9px] text-gray-400 uppercase tracking-wider">AI Style</p>
+            {post.title && (
+              <p className="text-[9px] text-gray-400 uppercase tracking-wider">{post.title}</p>
+            )}
           </div>
           <div className="flex gap-3 items-center">
             <button

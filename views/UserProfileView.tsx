@@ -56,9 +56,9 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ username, onBack, onS
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
+      <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 w-full px-1 md:px-0 space-y-2 md:space-y-4">
         {userPosts.map((post) => (
-          <div key={post.id}>
+          <div key={post.id} className="break-inside-avoid mb-2 md:mb-4">
             <PostCard
               post={post}
               onClick={(p) => onSelectPost(p, userPosts)}

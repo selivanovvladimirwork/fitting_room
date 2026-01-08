@@ -58,11 +58,35 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
           postsApi.getAll().catch(() => []),
         ]);
         setWardrobe(wardrobeData);
-        setCuratedPosts(postsData); // Только данные из API
+        // Use API data if available, otherwise use mock data
+        const MOCK_POSTS: Post[] = [
+          { id: 'h1', imageUrl: '/mock/uploaded_image_0_1767382693233.png', author: '@vogue_edge', likes: 3200, isPrivate: false, tags: ['Minimal'] },
+          { id: 'h2', imageUrl: '/mock/uploaded_image_1_1767382693233.png', author: '@urban_knight', likes: 1150, isPrivate: false, tags: ['Techwear'] },
+          { id: 'h3', imageUrl: '/mock/uploaded_image_2_1767382693233.png', author: '@luxe_daily', likes: 2800, isPrivate: false, tags: ['Silk'] },
+          { id: 'h4', imageUrl: '/mock/uploaded_image_3_1767382693233.png', author: '@nordic_style', likes: 940, isPrivate: false, tags: ['Scandi'] },
+          { id: 'h5', imageUrl: '/mock/uploaded_image_4_1767382693233.png', author: '@office_chic', likes: 1500, isPrivate: false, tags: ['Business'] },
+          { id: 'h6', imageUrl: '/mock/uploaded_image_0_1767382807800.png', author: '@denim_cult', likes: 2100, isPrivate: false, tags: ['Casual'] },
+          { id: 'h7', imageUrl: '/mock/uploaded_image_1_1767382807800.png', author: '@fit_life', likes: 3400, isPrivate: false, tags: ['Sport'] },
+          { id: 'h8', imageUrl: '/mock/uploaded_image_2_1767382807800.png', author: '@autumn_vibes', likes: 1800, isPrivate: false, tags: ['Outerwear'] },
+          { id: 'h9', imageUrl: '/mock/uploaded_image_3_1767382807800.png', author: '@boho_soul', likes: 2200, isPrivate: false, tags: ['Boho'] },
+        ];
+        setCuratedPosts(postsData.length > 0 ? postsData : MOCK_POSTS);
       } catch (error) {
-        console.log('API unavailable');
+        console.log('API unavailable, using mock data');
         setWardrobe([]);
-        setCuratedPosts([]);
+        // Fallback to mock data on error
+        const MOCK_POSTS: Post[] = [
+          { id: 'h1', imageUrl: '/mock/uploaded_image_0_1767382693233.png', author: '@vogue_edge', likes: 3200, isPrivate: false, tags: ['Minimal'] },
+          { id: 'h2', imageUrl: '/mock/uploaded_image_1_1767382693233.png', author: '@urban_knight', likes: 1150, isPrivate: false, tags: ['Techwear'] },
+          { id: 'h3', imageUrl: '/mock/uploaded_image_2_1767382693233.png', author: '@luxe_daily', likes: 2800, isPrivate: false, tags: ['Silk'] },
+          { id: 'h4', imageUrl: '/mock/uploaded_image_3_1767382693233.png', author: '@nordic_style', likes: 940, isPrivate: false, tags: ['Scandi'] },
+          { id: 'h5', imageUrl: '/mock/uploaded_image_4_1767382693233.png', author: '@office_chic', likes: 1500, isPrivate: false, tags: ['Business'] },
+          { id: 'h6', imageUrl: '/mock/uploaded_image_0_1767382807800.png', author: '@denim_cult', likes: 2100, isPrivate: false, tags: ['Casual'] },
+          { id: 'h7', imageUrl: '/mock/uploaded_image_1_1767382807800.png', author: '@fit_life', likes: 3400, isPrivate: false, tags: ['Sport'] },
+          { id: 'h8', imageUrl: '/mock/uploaded_image_2_1767382807800.png', author: '@autumn_vibes', likes: 1800, isPrivate: false, tags: ['Outerwear'] },
+          { id: 'h9', imageUrl: '/mock/uploaded_image_3_1767382807800.png', author: '@boho_soul', likes: 2200, isPrivate: false, tags: ['Boho'] },
+        ];
+        setCuratedPosts(MOCK_POSTS);
       } finally {
         setIsLoading(false);
       }
@@ -222,9 +246,9 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
                   <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
-                  <h3 className="text-lg font-bold text-gray-800 mb-2">Ваш гардероб пуст</h3>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">Ваша примерочная пуста</h3>
                   <p className="text-sm text-gray-500 max-w-md leading-relaxed">
-                    Добавьте вещи через кнопку <strong>«+»</strong> слева или нажмите на любой образ в ленте и выберите <strong>«Примерить»</strong>
+                    Добавьте вещи - нажмите на любой образ в ленте и выберите «Примерить»
                   </p>
                 </div>
               ) : wardrobe.map(item => (
@@ -271,9 +295,9 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
             <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 w-full">
+          <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 w-full px-1 md:px-0 space-y-2 md:space-y-4">
             {curatedPosts.map((post) => (
-              <div key={post.id}>
+              <div key={post.id} className="break-inside-avoid mb-2 md:mb-4">
                 <PostCard
                   post={post}
                   onClick={(p) => onFitPost(p)}

@@ -71,16 +71,24 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
     waist: 75 + Math.floor(Math.random() * 10)
   }), [post.id]);
 
-  const similarPosts = useMemo<Post[]>(() => [
-    { id: 'sim1', imageUrl: `https://picsum.photos/seed/${post.id}sim1/800/1200`, author: '@style_ref', likes: 120, isPrivate: false, tags: [] },
-    { id: 'sim2', imageUrl: `https://picsum.photos/seed/${post.id}sim2/800/1000`, author: '@trend_line', likes: 450, isPrivate: false, tags: [] },
-    { id: 'sim3', imageUrl: `https://picsum.photos/seed/${post.id}sim3/800/1400`, author: '@luxe_mood', likes: 320, isPrivate: false, tags: [] },
-    { id: 'sim4', imageUrl: `https://picsum.photos/seed/${post.id}sim4/800/900`, author: '@vogue_edge', likes: 890, isPrivate: false, tags: [] },
-    { id: 'sim5', imageUrl: `https://picsum.photos/seed/${post.id}sim5/800/1100`, author: '@minimal', likes: 2100, isPrivate: false, tags: [] },
-    { id: 'sim6', imageUrl: `https://picsum.photos/seed/${post.id}sim6/800/1300`, author: '@chic_daily', likes: 1500, isPrivate: false, tags: [] },
-    { id: 'sim7', imageUrl: `https://picsum.photos/seed/${post.id}sim7/800/1100`, author: '@urban_knight', likes: 1100, isPrivate: false, tags: [] },
-    { id: 'sim8', imageUrl: `https://picsum.photos/seed/${post.id}sim8/800/1200`, author: '@digital_style', likes: 2400, isPrivate: false, tags: [] },
-  ], [post.id]);
+  const [similarPosts, setSimilarPosts] = useState<Post[]>([]);
+
+  // Fetch and shuffle posts for similar section
+  useEffect(() => {
+    const fetchSimilarPosts = async () => {
+      try {
+        const { postsApi } = await import('../services/api');
+        const allPosts = await postsApi.getAll();
+        // Filter out current post and shuffle
+        const filtered = allPosts.filter((p: Post) => p.id !== post.id);
+        const shuffled = filtered.sort(() => Math.random() - 0.5).slice(0, 8);
+        setSimilarPosts(shuffled);
+      } catch (error) {
+        console.log('Failed to load similar posts');
+      }
+    };
+    fetchSimilarPosts();
+  }, [post.id]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -148,9 +156,9 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
           </button>
           <button
             onClick={() => onNavigateToProfile(post.author)}
-            className="text-3xl md:text-5xl font-thin tracking-widest uppercase flex-grow text-left hover:opacity-60"
+            className="text-3xl md:text-5xl font-thin tracking-widest flex-grow text-left hover:opacity-60"
           >
-            {post.author}
+            {post.author?.startsWith('@') ? post.author : `@${post.author}`}
           </button>
         </div>
         <button
@@ -205,7 +213,9 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
         <div className="w-full md:w-[450px] flex flex-col shrink-0">
           <div className="liquid-glass p-6 md:p-8 rounded-[30px] md:rounded-[40px] shadow-xl border border-white h-full flex flex-col">
             <div className="mb-6 md:mb-8">
-              <h3 className="text-2xl md:text-3xl font-light tracking-tight uppercase tracking-widest mb-4 md:mb-6">{productName}</h3>
+              {post.title && (
+                <h3 className="text-2xl md:text-3xl font-light tracking-tight uppercase tracking-widest mb-4 md:mb-6">{post.title}</h3>
+              )}
 
               <div className="flex items-center gap-4">
                 <button
@@ -235,20 +245,23 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
               </div>
             </div>
 
-            <div className="space-y-3 md:space-y-4 mb-6 md:mb-auto">
-              <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
-                <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Рост</span>
-                <span className="text-base md:text-lg font-light">{authorStats.height} см</span>
+            {/* Avatar stats - show only if available */}
+            {(post as any).avatarStats && (
+              <div className="space-y-3 md:space-y-4 mb-6 md:mb-auto">
+                <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
+                  <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Рост</span>
+                  <span className="text-base md:text-lg font-light">{(post as any).avatarStats.height} см</span>
+                </div>
+                <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
+                  <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Вес</span>
+                  <span className="text-base md:text-lg font-light">{(post as any).avatarStats.weight} кг</span>
+                </div>
+                <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
+                  <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Талия</span>
+                  <span className="text-base md:text-lg font-light">{(post as any).avatarStats.waist} см</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
-                <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Вес</span>
-                <span className="text-base md:text-lg font-light">{authorStats.weight} кг</span>
-              </div>
-              <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
-                <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Талия</span>
-                <span className="text-base md:text-lg font-light">{authorStats.waist} см</span>
-              </div>
-            </div>
+            )}
 
             <div className="flex flex-col gap-3 md:gap-3 mt-6 md:mt-8">
               <button
@@ -257,9 +270,16 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
               >
                 ПРИМЕРИТЬ
               </button>
-              <button className="w-full py-3 bg-white text-black border border-gray-200 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-100 active:scale-95 transition-all duration-300">
-                МАГАЗИН
-              </button>
+              {(post as any).storeUrl && (
+                <a
+                  href={(post as any).storeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 bg-white text-black border border-gray-200 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-100 active:scale-95 transition-all duration-300 text-center block"
+                >
+                  В МАГАЗИН
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -282,7 +302,7 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
           ))}
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 

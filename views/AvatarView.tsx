@@ -119,11 +119,12 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
             const posts = await profileApi.getMyPosts();
             setMyPosts(posts.map((p: any) => ({
               id: String(p.id),
-              imageUrl: p.image_url,
-              author: p.author_name || user?.nickname || '@user',
+              imageUrl: p.imageUrl,
+              author: p.author || user?.nickname || '@user',
               likes: p.likes || 0,
-              isPrivate: p.is_private || false,
-              tags: p.tags || []
+              isPrivate: p.isPrivate || false,
+              tags: p.tags || [],
+              title: p.title
             })));
             break;
           case 'following':
@@ -134,22 +135,24 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
             const saved = await profileApi.getSavedPosts();
             setSavedPosts(saved.map((p: any) => ({
               id: String(p.id),
-              imageUrl: p.image_url,
-              author: p.author_name || '@unknown',
+              imageUrl: p.imageUrl,
+              author: p.author || '@unknown',
               likes: p.likes || 0,
-              isPrivate: p.is_private || false,
-              tags: p.tags || []
+              isPrivate: p.isPrivate || false,
+              tags: p.tags || [],
+              title: p.title
             })));
             break;
           case 'liked':
             const liked = await profileApi.getLikedPosts();
             setLikedPosts(liked.map((p: any) => ({
               id: String(p.id),
-              imageUrl: p.image_url,
-              author: p.author_name || '@unknown',
+              imageUrl: p.imageUrl,
+              author: p.author || '@unknown',
               likes: p.likes || 0,
-              isPrivate: p.is_private || false,
-              tags: p.tags || []
+              isPrivate: p.isPrivate || false,
+              tags: p.tags || [],
+              title: p.title
             })));
             break;
         }
@@ -300,7 +303,7 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
       <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-12 gap-8">
         <div className="flex items-end gap-6">
           <div className="mb-2 flex flex-col">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase mb-2">
+            <h1 className="text-3xl md:text-5xl font-black tracking-tighter mb-2">
               @{user?.nickname || user?.name || 'USER'}
             </h1>
 
