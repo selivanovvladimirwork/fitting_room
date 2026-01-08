@@ -50,3 +50,36 @@
    ```bash
    git push origin front
    ```
+
+## Production Deployment (Reg.ru)
+
+**Frontend URL:** `https://fittingroom.fixers.su`  
+**API Backend:** `https://adminfittingroom.fixers.su/public/api`
+
+### Деплой
+
+1. Соберите проект:
+   ```bash
+   npm run build
+   ```
+
+2. Загрузите содержимое папки `dist/` в `~/www/fittingroom.fixers.su/`
+
+3. Создайте `.htaccess` для SPA-роутинга:
+   ```apache
+   RewriteEngine On
+   RewriteBase /
+   RewriteCond %{REQUEST_FILENAME} !-f
+   RewriteCond %{REQUEST_FILENAME} !-d
+   RewriteRule ^(.*)$ /index.html [L]
+   ```
+
+### API URL
+
+API URL определяется автоматически в `services/api.ts`:
+- Локально (`fittingroom.loc`): `https://fittingadmin.loc/api`
+- Продакшен: `https://adminfittingroom.fixers.su/public/api`
+
+### Обновление
+
+После изменений пересоберите и загрузите `dist/` на сервер.
