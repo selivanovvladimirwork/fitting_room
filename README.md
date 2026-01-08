@@ -56,23 +56,46 @@
 **Frontend URL:** `https://fittingroom.fixers.su`  
 **API Backend:** `https://adminfittingroom.fixers.su/public/api`
 
-### Деплой
+### Первоначальная настройка сервера
 
-1. Соберите проект:
-   ```bash
-   npm run build
-   ```
+```bash
+cd /var/www/u2733724/data/www/fittingroom.fixers.su
+git init
+git remote add origin https://github.com/brainwarcom/fittingroom.git
+git fetch origin dist-front
+git checkout -f dist-front
+mv dist/* .
+rm -rf dist
+```
 
-2. Загрузите содержимое папки `dist/` в `~/www/fittingroom.fixers.su/`
+### Деплой (обновление фронтенда)
 
-3. Создайте `.htaccess` для SPA-роутинга:
-   ```apache
-   RewriteEngine On
-   RewriteBase /
-   RewriteCond %{REQUEST_FILENAME} !-f
-   RewriteCond %{REQUEST_FILENAME} !-d
-   RewriteRule ^(.*)$ /index.html [L]
-   ```
+**Локально:**
+```bash
+npm run build
+git checkout dist-front
+git add -f dist/
+git commit -m "Build update"
+git push origin dist-front
+git checkout front
+```
+
+**На сервере:**
+```bash
+cd /var/www/u2733724/data/www/fittingroom.fixers.su
+git pull
+mv dist/* . 2>/dev/null || true
+```
+
+### .htaccess для SPA-роутинга
+
+```apache
+RewriteEngine On
+RewriteBase /
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ /index.html [L]
+```
 
 ### API URL
 
@@ -80,6 +103,3 @@ API URL определяется автоматически в `services/api.ts`
 - Локально (`fittingroom.loc`): `https://fittingadmin.loc/api`
 - Продакшен: `https://adminfittingroom.fixers.su/public/api`
 
-### Обновление
-
-После изменений пересоберите и загрузите `dist/` на сервер.
