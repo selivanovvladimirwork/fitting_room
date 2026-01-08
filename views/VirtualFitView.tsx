@@ -190,9 +190,16 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
   const [notification, setNotification] = useState<{ message: string } | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
 
-  // Save history to localStorage when it changes
+  // Save history to localStorage when it changes (limit to 10 items to avoid quota)
   useEffect(() => {
-    localStorage.setItem('generation_history', JSON.stringify(generationHistory));
+    try {
+      const limitedHistory = generationHistory.slice(0, 10);
+      localStorage.setItem('generation_history', JSON.stringify(limitedHistory));
+    } catch (e) {
+      console.warn('Failed to save history to localStorage:', e);
+      // If quota exceeded, clear old history
+      localStorage.removeItem('generation_history');
+    }
   }, [generationHistory]);
 
   useEffect(() => {
