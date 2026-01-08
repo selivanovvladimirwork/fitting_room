@@ -11,10 +11,11 @@ interface PostDetailViewProps {
   onNavigate: (direction: 'next' | 'prev') => void;
   onSelectPost: (post: Post, list: Post[]) => void;
   onNavigateToProfile: (username: string) => void;
+  onNavigateToShop?: (slug: string) => void;
   onFit: (post: Post) => void;
 }
 
-const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigate, onSelectPost, onNavigateToProfile, onFit }) => {
+const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigate, onSelectPost, onNavigateToProfile, onNavigateToShop, onFit }) => {
   const { requireAuth, isAuthenticated } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -259,6 +260,36 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
                 <div className="flex justify-between items-center py-3 md:py-4 border-b border-black/5">
                   <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">Талия</span>
                   <span className="text-base md:text-lg font-light">{(post as any).avatarStats.waist} см</span>
+                </div>
+              </div>
+            )}
+
+            {/* Shop Info Block */}
+            {post.shop && (
+              <div className="bg-gray-50 rounded-2xl p-4 mb-6">
+                <div className="flex items-center gap-3">
+                  {post.shop.logoUrl && (
+                    <img src={post.shop.logoUrl} alt={post.shop.name} className="w-10 h-10 rounded-xl object-cover" />
+                  )}
+                  <div className="flex-1">
+                    <button
+                      onClick={() => onNavigateToShop?.(post.shop!.slug)}
+                      className="text-sm font-bold hover:underline text-left"
+                    >
+                      {post.shop.name}
+                    </button>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest">Магазин</p>
+                  </div>
+                  {post.shop.externalUrl && (
+                    <a
+                      href={post.shop.externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-black text-white rounded-full text-[9px] font-bold uppercase tracking-widest hover:bg-gray-900 transition-all"
+                    >
+                      В магазин
+                    </a>
+                  )}
                 </div>
               </div>
             )}

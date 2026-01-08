@@ -11,6 +11,7 @@ export enum View {
   USER_PROFILE = 'user_profile',
   WARDROBE = 'wardrobe',
   SHOP = 'shop',
+  SHOP_DETAIL = 'shop_detail',
   AVATAR_SETTINGS = 'avatar_settings'
 }
 
@@ -38,6 +39,16 @@ export interface Product {
   storeUrl: string;
 }
 
+export interface Shop {
+  id: number;
+  name: string;
+  slug: string;
+  logoUrl?: string;
+  externalUrl?: string;
+  description?: string;
+  postsCount?: number;
+}
+
 export interface PostMedia {
   url: string;
   type: 'image' | 'video';
@@ -52,6 +63,7 @@ export interface Post {
   isPrivate: boolean;
   tags: string[];
   title?: string;
+  shop?: Shop;
 }
 
 export interface PostGroup {

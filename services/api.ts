@@ -217,6 +217,46 @@ export const generationApi = {
     },
 };
 
+// ==================== Shops API ====================
+export const shopsApi = {
+    async getAll() {
+        const response = await fetch(`${API_BASE}/shops`, {
+            headers: getHeaders(),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async getBySlug(slug: string) {
+        const response = await fetch(`${API_BASE}/shops/${slug}`, {
+            headers: getHeaders(),
+        });
+        return handleResponse<any>(response);
+    },
+
+    async getFavorites() {
+        const response = await fetch(`${API_BASE}/shops/favorites`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async addFavorite(shopId: number) {
+        const response = await fetch(`${API_BASE}/shops/${shopId}/favorite`, {
+            method: 'POST',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ success: boolean }>(response);
+    },
+
+    async removeFavorite(shopId: number) {
+        const response = await fetch(`${API_BASE}/shops/${shopId}/favorite`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ success: boolean }>(response);
+    },
+};
+
 // ==================== Post Groups API ====================
 export const postGroupsApi = {
     async getAll() {
@@ -393,5 +433,6 @@ export default {
     catalog: catalogApi,
     migration: migrationApi,
     generation: generationApi,
+    shops: shopsApi,
     migrateLocalStorageToApi,
 };
