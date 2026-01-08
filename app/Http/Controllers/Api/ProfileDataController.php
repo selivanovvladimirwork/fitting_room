@@ -17,7 +17,16 @@ class ProfileDataController extends Controller
     {
         $posts = $request->user()->posts()
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(fn($p) => [
+                'id' => (string) $p->id,
+                'imageUrl' => url('storage/' . $p->image_url),
+                'author' => $p->author_name,
+                'likes' => $p->likes,
+                'isPrivate' => $p->is_private,
+                'tags' => $p->tags ?? [],
+                'title' => $p->title,
+            ]);
 
         return response()->json($posts);
     }

@@ -103,7 +103,7 @@ class PostController extends Controller
             'user_id' => $request->user()->id,
             'title' => $validated['title'] ?? null,
             'image_url' => $imagePath, // Сохраняем путь к файлу
-            'author_name' => $validated['author_name'] ?? '@' . $request->user()->name,
+            'author_name' => $validated['author_name'] ?? '@' . $request->user()->nickname,
             'tags' => $validated['tags'] ?? [],
             'is_private' => $validated['is_private'] ?? false,
             'likes' => 0,

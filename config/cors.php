@@ -15,13 +15,15 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'public/api/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
         'https://fittingroom.loc',
         'http://fittingroom.loc',
+        'https://fittingroom.fixers.su',
+        'http://fittingroom.fixers.su',
     ],
 
     'allowed_origins_patterns' => [],
