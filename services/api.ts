@@ -1,9 +1,12 @@
 /**
  * API Service for FittingRoom
- * Взаимодействие с backend (fittingadmin.loc)
+ * Взаимодействие с backend
  */
 
-const API_BASE = 'https://fittingadmin.loc/api';
+// Автоопределение: локалка или продакшен
+const API_BASE = window.location.hostname === 'fittingroom.loc' 
+    ? 'https://fittingadmin.loc/api'
+    : 'https://adminfittingroom.fixers.su/api';
 
 // Получить токен из localStorage
 const getToken = (): string | null => {
