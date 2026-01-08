@@ -3,6 +3,7 @@ import { Scenario, Post, DigitalTwin } from '../types';
 import PostCard from '../components/PostCard';
 import { generationApi, wardrobeApi, postsApi } from '../services/api';
 import Notification from '../components/Notification';
+import ProductInfoModal from '../components/ProductInfoModal';
 
 interface VirtualFitViewProps {
   initialPost?: Post | null;
@@ -188,6 +189,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     return saved ? JSON.parse(saved) : [];
   });
   const [notification, setNotification] = useState<{ message: string } | null>(null);
+  const [modalAction, setModalAction] = useState<'wardrobe' | 'publish' | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
 
   // Save history to localStorage when it changes (limit to 10 items to avoid quota)
@@ -458,14 +460,15 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     }
   };
 
-  const handleAddToWardrobe = async () => {
+  const handleAddToWardrobe = async (productInfo?: { title?: string; storeUrl?: string }) => {
     if (!resultUrl) return;
 
     try {
       const newItem = await wardrobeApi.add({
         image_url: resultUrl,
-        title: activeCloth?.title || 'Новый образ',
-        brand: 'Virtual Fit'
+        title: productInfo?.title || activeCloth?.title || 'Новый образ',
+        brand: 'Virtual Fit',
+        store_url: productInfo?.storeUrl
       });
 
       // Update local state
@@ -482,15 +485,16 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = async (productInfo?: { title?: string; storeUrl?: string }) => {
     if (!resultUrl) return;
 
     try {
       await postsApi.create({
         image_url: resultUrl,
-        title: activeCloth?.title || 'Новый образ',
+        title: productInfo?.title || activeCloth?.title || 'Новый образ',
         tags: ['Published', 'Virtual Fit'],
-        is_private: false
+        is_private: false,
+        store_url: productInfo?.storeUrl
       });
 
       setNotification({ message: 'Образ опубликован в ленте' });
@@ -498,6 +502,15 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       console.error('Failed to publish:', e);
       setNotification({ message: 'Ошибка: Необходима авторизация' });
     }
+  };
+
+  const handleModalConfirm = (data: { title?: string; storeUrl?: string }) => {
+    if (modalAction === 'wardrobe') {
+      handleAddToWardrobe(data);
+    } else if (modalAction === 'publish') {
+      handlePublish(data);
+    }
+    setModalAction(null);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -809,14 +822,14 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
                 <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-black/5 animate-in fade-in slide-in-from-bottom-2">
                   <div className="flex gap-2">
                     <button
-                      onClick={handleAddToWardrobe}
+                      onClick={() => setModalAction('wardrobe')}
                       className="flex-1 py-3 bg-white border border-black/10 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                       В гардероб
                     </button>
                     <button
-                      onClick={handlePublish}
+                      onClick={() => setModalAction('publish')}
                       className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
@@ -958,7 +971,15 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
           />
         )
       }
-    </div >
+
+      {modalAction && (
+        <ProductInfoModal
+          action={modalAction}
+          onConfirm={handleModalConfirm}
+          onClose={() => setModalAction(null)}
+        />
+      )}
+    </div>
   );
 };
 

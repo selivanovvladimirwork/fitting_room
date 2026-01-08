@@ -120,7 +120,7 @@ export const postsApi = {
         return handleResponse<any[]>(response);
     },
 
-    async create(data: { image_url: string; title?: string; tags?: string[]; is_private?: boolean }) {
+    async create(data: { image_url: string; title?: string; tags?: string[]; is_private?: boolean; store_url?: string }) {
         const response = await fetch(`${API_BASE}/posts`, {
             method: 'POST',
             headers: getHeaders(true),
@@ -175,7 +175,7 @@ export const wardrobeApi = {
         return handleResponse<any[]>(response);
     },
 
-    async add(data: { image_url: string; title?: string; brand?: string }) {
+    async add(data: { image_url: string; title?: string; brand?: string; store_url?: string }) {
         const response = await fetch(`${API_BASE}/wardrobe`, {
             method: 'POST',
             headers: getHeaders(true),
