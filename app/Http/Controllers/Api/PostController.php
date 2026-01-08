@@ -44,7 +44,9 @@ class PostController extends Controller
      */
     public function show(Post $post): JsonResponse
     {
-        return response()->json([
+        $post->load('shop');
+        
+        $response = [
             'id' => (string) $post->id,
             'imageUrl' => url('storage/' . $post->image_url),
             'author' => $post->author_name,
@@ -52,7 +54,19 @@ class PostController extends Controller
             'isPrivate' => $post->is_private,
             'tags' => $post->tags ?? [],
             'title' => $post->title,
-        ]);
+        ];
+        
+        if ($post->shop) {
+            $response['shop'] = [
+                'id' => $post->shop->id,
+                'name' => $post->shop->name,
+                'slug' => $post->shop->slug,
+                'logoUrl' => $post->shop->logo_url ? url('storage/' . $post->shop->logo_url) : null,
+                'externalUrl' => $post->shop->external_url,
+            ];
+        }
+        
+        return response()->json($response);
     }
 
     /**

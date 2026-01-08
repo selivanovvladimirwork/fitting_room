@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\MigrationController;
 use App\Http\Controllers\Api\GenerationController;
 use App\Http\Controllers\Api\PostGroupController;
 use App\Http\Controllers\Api\ProfileDataController;
+use App\Http\Controllers\Api\ShopController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,6 +25,8 @@ Route::get('/posts', [PostController::class, 'index']);
 Route::get('/posts/{post}', [PostController::class, 'show']);
 Route::get('/users/{nickname}/posts', [PostController::class, 'byUser']); // Посты пользователя по никнейму
 Route::get('/catalog', [WardrobeController::class, 'catalog']); // Системные товары для примерки
+Route::get('/shops', [ShopController::class, 'index']);
+Route::get('/shops/{slug}', [ShopController::class, 'show']);
 
 // Защищённые роуты (требуют аутентификации)
 Route::middleware('auth:sanctum')->group(function () {
@@ -74,5 +77,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // AI Generation
     Route::post('/generate', [GenerationController::class, 'generate']);
+    
+    // Shop Favorites
+    Route::get('/shops/favorites', [ShopController::class, 'favorites']);
+    Route::post('/shops/{shop}/favorite', [ShopController::class, 'addFavorite']);
+    Route::delete('/shops/{shop}/favorite', [ShopController::class, 'removeFavorite']);
 });
 

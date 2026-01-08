@@ -114,4 +114,13 @@ class User extends Authenticatable implements FilamentUser
         return $this->belongsToMany(Post::class, 'liked_posts')
             ->withTimestamps('created_at', null);
     }
+
+    /**
+     * Избранные магазины
+     */
+    public function favoriteShops(): BelongsToMany
+    {
+        return $this->belongsToMany(Shop::class, 'favorite_shops')
+            ->withTimestamps();
+    }
 }
