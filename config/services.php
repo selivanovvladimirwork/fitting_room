@@ -31,4 +31,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'yandex' => [
+        'api_key_id' => env('YANDEX_API_KEY_ID'),
+        'api_key_secret' => env('YANDEX_API_KEY_SECRET'),
+        'folder_id' => env('YANDEX_FOLDER_ID'),
+    ],
+
 ];

@@ -7,18 +7,20 @@ use Illuminate\Support\Facades\Log;
 
 class YandexSearchService
 {
-    private string $user;
-    private string $key;
-    private string $baseUrl = 'https://yandex.ru/search/xml';
+    private string $apiKeyId;
+    private string $apiKeySecret;
+    private string $folderId;
+    private string $baseUrl = 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync';
 
     public function __construct()
     {
-        $this->user = config('services.yandex.user', '');
-        $this->key = config('services.yandex.key', '');
+        $this->apiKeyId = config('services.yandex.api_key_id', '');
+        $this->apiKeySecret = config('services.yandex.api_key_secret', '');
+        $this->folderId = config('services.yandex.folder_id', '');
     }
 
     /**
-     * Поиск магазинов через Yandex XML API
+     * Поиск магазинов через Yandex Cloud Search API
      *
      * @param string $query Поисковый запрос
      * @return array Массив результатов [{title, url, snippet, domain}]
@@ -26,35 +28,131 @@ class YandexSearchService
     public function searchShops(string $query): array
     {
         // Если ключи не настроены, возвращаем заглушку
-        if (empty($this->user) || empty($this->key)) {
+        if (empty($this->apiKeySecret) || empty($this->folderId)) {
             return $this->getMockResults($query);
         }
 
         try {
-            // Добавляем "магазин" к запросу для релевантности
             $searchQuery = $query . ' магазин купить';
+            $results = $this->performSearch($searchQuery);
             
-            $response = Http::get($this->baseUrl, [
-                'user' => $this->user,
-                'key' => $this->key,
-                'query' => $searchQuery,
-                'l10n' => 'ru',
-                'sortby' => 'rlv',
-                'filter' => 'strict',
-                'groupby' => 'attr=d.mode=deep.groups-on-page=10.docs-in-group=1',
-            ]);
-
-            if ($response->successful()) {
-                return $this->parseXmlResponse($response->body());
-            }
-
-            Log::warning('Yandex API error', ['status' => $response->status()]);
-            return $this->getMockResults($query);
+            return array_map(function ($item) {
+                return [
+                    'title' => $item['title'] ?? '',
+                    'url' => $item['url'] ?? '',
+                    'snippet' => $item['snippet'] ?? '',
+                    'domain' => $item['domain'] ?? '',
+                ];
+            }, $results);
 
         } catch (\Exception $e) {
             Log::error('Yandex search failed', ['error' => $e->getMessage()]);
             return $this->getMockResults($query);
         }
+    }
+
+    /**
+     * Поиск товаров с картинками
+     *
+     * @param string $query Поисковый запрос
+     * @return array Массив товаров [{id, imageUrl, title, url, domain, price}]
+     */
+    public function searchProducts(string $query): array
+    {
+        // Если ключи не настроены, возвращаем заглушку
+        if (empty($this->apiKeySecret) || empty($this->folderId)) {
+            return $this->getMockProductResults($query);
+        }
+
+        try {
+            $searchQuery = $query . ' купить интернет-магазин';
+            $results = $this->performSearch($searchQuery);
+            
+            return array_map(function ($item, $index) {
+                return [
+                    'id' => 'yandex-' . $index,
+                    'imageUrl' => $item['imageUrl'] ?? 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=600&fit=crop',
+                    'title' => $item['title'] ?? '',
+                    'url' => $item['url'] ?? '',
+                    'domain' => $item['domain'] ?? '',
+                    'price' => null,
+                ];
+            }, $results, array_keys($results));
+
+        } catch (\Exception $e) {
+            Log::error('Yandex product search failed', ['error' => $e->getMessage()]);
+            return $this->getMockProductResults($query);
+        }
+    }
+
+    /**
+     * Выполнение поискового запроса через Yandex Cloud Search API
+     */
+    private function performSearch(string $query): array
+    {
+        $response = Http::withHeaders([
+            'Authorization' => 'Api-Key ' . $this->apiKeySecret,
+            'Content-Type' => 'application/json',
+        ])->post($this->baseUrl, [
+            'query' => [
+                'searchType' => 'SEARCH_TYPE_RU',
+                'queryText' => $query,
+            ],
+            'folderId' => $this->folderId,
+            'responseFormat' => 'FORMAT_XML',
+            'userAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        ]);
+
+        if (!$response->successful()) {
+            Log::warning('Yandex API error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+            return [];
+        }
+
+        // API возвращает operation, нужно получить результат
+        $operation = $response->json();
+        
+        if (!isset($operation['id'])) {
+            return [];
+        }
+
+        // Получаем результат операции
+        return $this->getOperationResult($operation['id']);
+    }
+
+    /**
+     * Получение результата асинхронной операции
+     */
+    private function getOperationResult(string $operationId): array
+    {
+        $maxAttempts = 10;
+        $attempt = 0;
+
+        while ($attempt < $maxAttempts) {
+            $response = Http::withHeaders([
+                'Authorization' => 'Api-Key ' . $this->apiKeySecret,
+            ])->get("https://operation.api.cloud.yandex.net/operations/{$operationId}");
+
+            if (!$response->successful()) {
+                break;
+            }
+
+            $operation = $response->json();
+            
+            if (isset($operation['done']) && $operation['done']) {
+                if (isset($operation['response'])) {
+                    return $this->parseXmlResponse(base64_decode($operation['response']['rawData'] ?? ''));
+                }
+                break;
+            }
+
+            $attempt++;
+            usleep(500000); // 500ms
+        }
+
+        return [];
     }
 
     /**
@@ -65,24 +163,27 @@ class YandexSearchService
         $results = [];
 
         try {
-            $doc = simplexml_load_string($xml);
-            
-            if (!$doc || !isset($doc->response->results->grouping->group)) {
+            if (empty($xml)) {
                 return [];
             }
 
-            foreach ($doc->response->results->grouping->group as $group) {
-                if (!isset($group->doc)) continue;
-                
-                $doc = $group->doc;
-                $url = (string) $doc->url;
+            $doc = @simplexml_load_string($xml);
+            
+            if (!$doc) {
+                return [];
+            }
+
+            // Парсим результаты из XML формата Yandex
+            foreach ($doc->xpath('//group/doc') as $docNode) {
+                $url = (string) ($docNode->url ?? '');
                 $domain = parse_url($url, PHP_URL_HOST) ?: '';
                 
                 $results[] = [
-                    'title' => strip_tags((string) $doc->title),
+                    'title' => strip_tags((string) ($docNode->title ?? '')),
                     'url' => $url,
-                    'snippet' => strip_tags((string) ($doc->passages->passage[0] ?? '')),
+                    'snippet' => strip_tags((string) ($docNode->passages->passage[0] ?? '')),
                     'domain' => str_replace('www.', '', $domain),
+                    'imageUrl' => (string) ($docNode->{'passage-image'} ?? ''),
                 ];
             }
         } catch (\Exception $e) {
@@ -93,13 +194,11 @@ class YandexSearchService
     }
 
     /**
-     * Заглушка с популярными магазинами (для тестирования без API-ключа)
+     * Заглушка с популярными магазинами
      */
     private function getMockResults(string $query): array
     {
-        $queryLower = mb_strtolower($query);
-        
-        $allShops = [
+        return [
             [
                 'title' => 'Wildberries — модная одежда и обувь',
                 'url' => 'https://www.wildberries.ru/catalog/zhenshchinam/odezhda',
@@ -137,27 +236,6 @@ class YandexSearchService
                 'domain' => 'lime-shop.com',
             ],
         ];
-
-        // Фильтруем результаты по запросу
-        return array_values(array_filter($allShops, function ($shop) use ($queryLower) {
-            return mb_strpos(mb_strtolower($shop['title']), $queryLower) !== false ||
-                   mb_strpos(mb_strtolower($shop['domain']), $queryLower) !== false ||
-                   mb_strpos(mb_strtolower($shop['snippet']), $queryLower) !== false ||
-                   true; // Возвращаем все, если совпадений нет
-        }));
-    }
-
-    /**
-     * Поиск товаров с картинками через Yandex
-     *
-     * @param string $query Поисковый запрос
-     * @return array Массив товаров [{id, imageUrl, title, url, domain, price}]
-     */
-    public function searchProducts(string $query): array
-    {
-        // Пока используем mock-данные с реальными картинками
-        // В будущем можно подключить Yandex Images API
-        return $this->getMockProductResults($query);
     }
 
     /**
@@ -165,10 +243,7 @@ class YandexSearchService
      */
     private function getMockProductResults(string $query): array
     {
-        $queryLower = mb_strtolower($query);
-        
-        // Товары с реальными картинками (placeholder images)
-        $products = [
+        return [
             [
                 'id' => 'yandex-1',
                 'imageUrl' => 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=400&h=600&fit=crop',
@@ -234,16 +309,5 @@ class YandexSearchService
                 'price' => '9 499 ₽',
             ],
         ];
-
-        // Фильтруем по запросу (простой поиск)
-        if (!empty($queryLower) && $queryLower !== 'все' && $queryLower !== 'all') {
-            $products = array_filter($products, function ($p) use ($queryLower) {
-                return mb_strpos(mb_strtolower($p['title']), $queryLower) !== false ||
-                       mb_strpos(mb_strtolower($p['domain']), $queryLower) !== false;
-            });
-        }
-
-        return array_values($products);
     }
 }
-
