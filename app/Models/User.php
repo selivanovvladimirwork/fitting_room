@@ -123,4 +123,12 @@ class User extends Authenticatable implements FilamentUser
         return $this->belongsToMany(Shop::class, 'favorite_shops')
             ->withTimestamps();
     }
+
+    /**
+     * Избранные внешние магазины (из поиска)
+     */
+    public function favoriteExternalShops(): HasMany
+    {
+        return $this->hasMany(FavoriteExternalShop::class);
+    }
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\PostGroupController;
 use App\Http\Controllers\Api\ProfileDataController;
 use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\FavoriteExternalShopController;
 
 /*
 |--------------------------------------------------------------------------
@@ -86,5 +87,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/shops/favorites', [ShopController::class, 'favorites']);
     Route::post('/shops/{shop}/favorite', [ShopController::class, 'addFavorite']);
     Route::delete('/shops/{shop}/favorite', [ShopController::class, 'removeFavorite']);
+    
+    // Favorite External Shops (from search)
+    Route::get('/favorite-external-shops', [FavoriteExternalShopController::class, 'index']);
+    Route::post('/favorite-external-shops', [FavoriteExternalShopController::class, 'store']);
+    Route::delete('/favorite-external-shops/{domain}', [FavoriteExternalShopController::class, 'destroy']);
+    Route::post('/favorite-external-shops/check', [FavoriteExternalShopController::class, 'check']);
 });
 
