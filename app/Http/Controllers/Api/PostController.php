@@ -28,7 +28,7 @@ class PostController extends Controller
             ->get()
             ->map(fn($p) => [
                 'id' => (string) $p->id,
-                'imageUrl' => url('storage/' . $p->image_url),
+                'imageUrl' => url('cors-storage/' . $p->image_url),
                 'author' => $p->author_name,
                 'likes' => $p->likes,
                 'isPrivate' => $p->is_private,
@@ -48,7 +48,7 @@ class PostController extends Controller
         
         $response = [
             'id' => (string) $post->id,
-            'imageUrl' => url('storage/' . $post->image_url),
+            'imageUrl' => url('cors-storage/' . $post->image_url),
             'author' => $post->author_name,
             'likes' => $post->likes,
             'isPrivate' => $post->is_private,
@@ -61,7 +61,7 @@ class PostController extends Controller
                 'id' => $post->shop->id,
                 'name' => $post->shop->name,
                 'slug' => $post->shop->slug,
-                'logoUrl' => $post->shop->logo_url ? url('storage/' . $post->shop->logo_url) : null,
+                'logoUrl' => $post->shop->logo_url ? url('cors-storage/' . $post->shop->logo_url) : null,
                 'externalUrl' => $post->shop->external_url,
             ];
         }
@@ -86,7 +86,7 @@ class PostController extends Controller
             ->get()
             ->map(fn($p) => [
                 'id' => (string) $p->id,
-                'imageUrl' => url('storage/' . $p->image_url),
+                'imageUrl' => url('cors-storage/' . $p->image_url),
                 'author' => $p->author_name,
                 'likes' => $p->likes,
                 'isPrivate' => $p->is_private,
@@ -125,7 +125,7 @@ class PostController extends Controller
 
         return response()->json([
             'id' => (string) $post->id,
-            'imageUrl' => url('storage/' . $post->image_url),
+            'imageUrl' => url('cors-storage/' . $post->image_url),
             'author' => $post->author_name,
             'likes' => $post->likes,
             'isPrivate' => $post->is_private,

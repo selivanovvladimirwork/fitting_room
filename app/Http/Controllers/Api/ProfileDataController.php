@@ -20,7 +20,7 @@ class ProfileDataController extends Controller
             ->get()
             ->map(fn($p) => [
                 'id' => (string) $p->id,
-                'imageUrl' => url('storage/' . $p->image_url),
+                'imageUrl' => url('cors-storage/' . $p->image_url),
                 'author' => $p->author_name,
                 'likes' => $p->likes,
                 'isPrivate' => $p->is_private,
