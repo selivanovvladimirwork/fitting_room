@@ -64,43 +64,35 @@ class YandexSearchService
             return $this->getMockProductResults($query);
         }
 
-        // Placeholder изображения для fallback
-        $placeholders = [
-            'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&h=600&fit=crop',
-        ];
-
         try {
             $searchQuery = $query . ' купить интернет-магазин';
             $results = $this->performSearch($searchQuery);
             
             // Извлекаем изображения из страниц товаров
             $products = [];
-            foreach ($results as $index => $item) {
+            $productIndex = 0;
+            
+            foreach ($results as $item) {
                 $url = $item['url'] ?? '';
                 
                 // Попробуем извлечь og:image
                 $ogImage = $this->extractOgImage($url);
                 
-                // Используем og:image или fallback
-                $imageUrl = !empty($ogImage) 
-                    ? $ogImage 
-                    : $placeholders[$index % count($placeholders)];
+                // Пропускаем товары без изображения
+                if (empty($ogImage)) {
+                    continue;
+                }
                 
                 $products[] = [
-                    'id' => 'yandex-' . $index,
-                    'imageUrl' => $imageUrl,
+                    'id' => 'yandex-' . $productIndex,
+                    'imageUrl' => $ogImage,
                     'title' => $item['title'] ?? '',
                     'url' => $url,
                     'domain' => $item['domain'] ?? '',
                     'price' => null,
                 ];
+                
+                $productIndex++;
             }
             
             return $products;
