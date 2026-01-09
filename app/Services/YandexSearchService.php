@@ -198,53 +198,55 @@ class YandexSearchService
 
             // Парсим результаты из XML формата Yandex Images
             $index = 0;
+            $productIndex = 0;
+            
             foreach ($doc->xpath('//group/doc') as $docNode) {
-                // Логируем первый документ для отладки структуры
-                if ($index === 0) {
-                    Log::info('First image doc structure', [
-                        'xml' => $docNode->asXML(),
-                        'children' => array_keys((array) $docNode),
-                    ]);
+                // Получаем image-properties
+                $imageProps = $docNode->{'image-properties'};
+                
+                if (!$imageProps) {
+                    $index++;
+                    continue;
                 }
                 
-                // Пробуем разные варианты названий полей
-                $imageUrl = (string) ($docNode->{'image-link'} ?? '');
+                // image-link находится внутри image-properties
+                $imageUrl = (string) ($imageProps->{'image-link'} ?? '');
+                
+                // Альтернативно используем thumbnail-link
                 if (empty($imageUrl)) {
-                    $imageUrl = (string) ($docNode->{'image_link'} ?? '');
-                }
-                if (empty($imageUrl)) {
-                    $imageUrl = (string) ($docNode->{'img-link'} ?? '');
-                }
-                if (empty($imageUrl)) {
-                    $imageUrl = (string) ($docNode->image ?? '');
+                    $imageUrl = (string) ($imageProps->{'thumbnail-link'} ?? '');
                 }
                 
-                $pageUrl = (string) ($docNode->url ?? '');
-                $title = strip_tags((string) ($docNode->title ?? ''));
+                // html-link — это URL страницы товара
+                $pageUrl = (string) ($imageProps->{'html-link'} ?? '');
+                
+                // Если нет html-link, используем url из doc (это URL изображения)
+                if (empty($pageUrl)) {
+                    $pageUrl = (string) ($docNode->url ?? '');
+                }
+                
                 $domain = parse_url($pageUrl, PHP_URL_HOST) ?: '';
                 
                 // Пропускаем если нет изображения
                 if (empty($imageUrl)) {
-                    if ($index < 3) {
-                        Log::info('No image in doc', ['index' => $index, 'pageUrl' => $pageUrl]);
-                    }
                     $index++;
                     continue;
                 }
                 
                 $results[] = [
-                    'id' => 'yandex-img-' . $index,
+                    'id' => 'yandex-img-' . $productIndex,
                     'imageUrl' => $imageUrl,
-                    'title' => $title ?: 'Товар',
+                    'title' => 'Товар из ' . str_replace('www.', '', $domain),
                     'url' => $pageUrl,
                     'domain' => str_replace('www.', '', $domain),
                     'price' => null,
                 ];
                 
+                $productIndex++;
                 $index++;
                 
                 // Ограничиваем количество результатов
-                if ($index >= 20) {
+                if ($productIndex >= 20) {
                     break;
                 }
             }
