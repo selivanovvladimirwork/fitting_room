@@ -81,12 +81,10 @@ class YandexSearchService
      */
     private function performImageSearch(string $query): array
     {
-        $imageSearchUrl = 'https://searchapi.api.cloud.yandex.net/v2/image/searchAsync';
+        // Синхронный эндпоинт для Image Search
+        $imageSearchUrl = 'https://searchapi.api.cloud.yandex.net/v2/image/search';
         
-        $response = Http::withHeaders([
-            'Authorization' => 'Api-Key ' . $this->apiKeySecret,
-            'Content-Type' => 'application/json',
-        ])->post($imageSearchUrl, [
+        $requestBody = [
             'query' => [
                 'searchType' => 'SEARCH_TYPE_RU',
                 'queryText' => $query,
@@ -94,29 +92,44 @@ class YandexSearchService
             ],
             'folderId' => $this->folderId,
             'responseFormat' => 'FORMAT_XML',
-            'userAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        ]);
+        ];
+        
+        Log::info('Image Search request', ['url' => $imageSearchUrl, 'body' => $requestBody]);
+        
+        $response = Http::timeout(30)->withHeaders([
+            'Authorization' => 'Api-Key ' . $this->apiKeySecret,
+            'Content-Type' => 'application/json',
+        ])->post($imageSearchUrl, $requestBody);
+
+        Log::info('Image Search response', ['status' => $response->status(), 'body_length' => strlen($response->body())]);
 
         if (!$response->successful()) {
             Log::warning('Yandex Image API error', [
                 'status' => $response->status(),
-                'body' => $response->body(),
+                'body' => substr($response->body(), 0, 1000),
             ]);
             return [];
         }
 
-        // API возвращает operation, нужно получить результат
-        $operation = $response->json();
+        // Для синхронного API ответ содержит данные напрямую
+        $responseData = $response->json();
         
-        Log::info('Image Search operation started', ['operation' => $operation]);
-        
-        if (!isset($operation['id'])) {
-            Log::warning('No operation ID in response', ['response' => $operation]);
-            return [];
+        // Проверяем структуру ответа
+        if (isset($responseData['rawData'])) {
+            // Прямой ответ с данными
+            $xml = base64_decode($responseData['rawData']);
+            Log::info('Image XML received (direct)', ['xml_length' => strlen($xml)]);
+            return $this->parseImageXmlResponse($xml);
         }
-
-        // Получаем результат операции
-        return $this->getImageOperationResult($operation['id']);
+        
+        // Если это асинхронная операция
+        if (isset($responseData['id'])) {
+            Log::info('Image Search operation started', ['operation' => $responseData]);
+            return $this->getImageOperationResult($responseData['id']);
+        }
+        
+        Log::warning('Unexpected response format', ['response' => $responseData]);
+        return [];
     }
 
     /**
