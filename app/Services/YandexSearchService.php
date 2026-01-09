@@ -199,13 +199,36 @@ class YandexSearchService
             // Парсим результаты из XML формата Yandex Images
             $index = 0;
             foreach ($doc->xpath('//group/doc') as $docNode) {
+                // Логируем первый документ для отладки структуры
+                if ($index === 0) {
+                    Log::info('First image doc structure', [
+                        'xml' => $docNode->asXML(),
+                        'children' => array_keys((array) $docNode),
+                    ]);
+                }
+                
+                // Пробуем разные варианты названий полей
                 $imageUrl = (string) ($docNode->{'image-link'} ?? '');
+                if (empty($imageUrl)) {
+                    $imageUrl = (string) ($docNode->{'image_link'} ?? '');
+                }
+                if (empty($imageUrl)) {
+                    $imageUrl = (string) ($docNode->{'img-link'} ?? '');
+                }
+                if (empty($imageUrl)) {
+                    $imageUrl = (string) ($docNode->image ?? '');
+                }
+                
                 $pageUrl = (string) ($docNode->url ?? '');
                 $title = strip_tags((string) ($docNode->title ?? ''));
                 $domain = parse_url($pageUrl, PHP_URL_HOST) ?: '';
                 
                 // Пропускаем если нет изображения
                 if (empty($imageUrl)) {
+                    if ($index < 3) {
+                        Log::info('No image in doc', ['index' => $index, 'pageUrl' => $pageUrl]);
+                    }
+                    $index++;
                     continue;
                 }
                 
