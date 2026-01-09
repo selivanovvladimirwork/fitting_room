@@ -27,6 +27,28 @@ class ShopController extends Controller
     }
 
     /**
+     * Популярные магазины РФ
+     */
+    public function popular(): JsonResponse
+    {
+        $shops = Shop::where('is_popular', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn($shop) => [
+                'id' => $shop->id,
+                'name' => $shop->name,
+                'slug' => $shop->slug,
+                'domain' => $shop->domain,
+                'logoUrl' => $shop->logo_url ? url('storage/' . $shop->logo_url) : null,
+                'externalUrl' => $shop->external_url,
+                'category' => $shop->category,
+                'description' => $shop->description,
+            ]);
+
+        return response()->json($shops);
+    }
+
+    /**
      * Детали магазина по slug
      */
     public function show(string $slug): JsonResponse

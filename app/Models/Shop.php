@@ -14,9 +14,13 @@ class Shop extends Model
     protected $fillable = [
         'name',
         'slug',
+        'domain',
         'external_url',
         'logo_url',
         'description',
+        'category',
+        'is_popular',
+        'sort_order',
     ];
 
     public function posts(): HasMany

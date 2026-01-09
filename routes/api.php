@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\GenerationController;
 use App\Http\Controllers\Api\PostGroupController;
 use App\Http\Controllers\Api\ProfileDataController;
 use App\Http\Controllers\Api\ShopController;
+use App\Http\Controllers\Api\SearchController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,7 +27,9 @@ Route::get('/posts/{post}', [PostController::class, 'show']);
 Route::get('/users/{nickname}/posts', [PostController::class, 'byUser']); // Посты пользователя по никнейму
 Route::get('/catalog', [WardrobeController::class, 'catalog']); // Системные товары для примерки
 Route::get('/shops', [ShopController::class, 'index']);
+Route::get('/shops/popular', [ShopController::class, 'popular']);
 Route::get('/shops/{slug}', [ShopController::class, 'show']);
+Route::post('/search', [SearchController::class, 'search']);
 
 // Защищённые роуты (требуют аутентификации)
 Route::middleware('auth:sanctum')->group(function () {
