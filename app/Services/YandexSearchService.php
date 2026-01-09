@@ -80,25 +80,83 @@ class YandexSearchService
             $searchQuery = $query . ' купить интернет-магазин';
             $results = $this->performSearch($searchQuery);
             
-            return array_map(function ($item, $index) use ($placeholders) {
-                // Используем empty() для проверки пустой строки
-                $imageUrl = !empty($item['imageUrl']) 
-                    ? $item['imageUrl'] 
+            // Извлекаем изображения из страниц товаров
+            $products = [];
+            foreach ($results as $index => $item) {
+                $url = $item['url'] ?? '';
+                
+                // Попробуем извлечь og:image
+                $ogImage = $this->extractOgImage($url);
+                
+                // Используем og:image или fallback
+                $imageUrl = !empty($ogImage) 
+                    ? $ogImage 
                     : $placeholders[$index % count($placeholders)];
                 
-                return [
+                $products[] = [
                     'id' => 'yandex-' . $index,
                     'imageUrl' => $imageUrl,
                     'title' => $item['title'] ?? '',
-                    'url' => $item['url'] ?? '',
+                    'url' => $url,
                     'domain' => $item['domain'] ?? '',
                     'price' => null,
                 ];
-            }, $results, array_keys($results));
+            }
+            
+            return $products;
 
         } catch (\Exception $e) {
             Log::error('Yandex product search failed', ['error' => $e->getMessage()]);
             return $this->getMockProductResults($query);
+        }
+    }
+
+    /**
+     * Извлечение og:image из страницы товара
+     *
+     * @param string $url URL страницы
+     * @return string|null URL изображения или null
+     */
+    private function extractOgImage(string $url): ?string
+    {
+        if (empty($url)) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(3)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept' => 'text/html',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                return null;
+            }
+
+            $html = $response->body();
+            
+            // Ищем og:image
+            if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/', $html, $matches)) {
+                return $matches[1];
+            }
+            
+            // Альтернативный порядок атрибутов
+            if (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']/', $html, $matches)) {
+                return $matches[1];
+            }
+
+            // Ищем twitter:image как fallback
+            if (preg_match('/<meta[^>]+(?:name|property)=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']/', $html, $matches)) {
+                return $matches[1];
+            }
+
+            return null;
+
+        } catch (\Exception $e) {
+            Log::debug('Failed to extract og:image', ['url' => $url, 'error' => $e->getMessage()]);
+            return null;
         }
     }
 
