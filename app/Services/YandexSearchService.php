@@ -52,7 +52,7 @@ class YandexSearchService
     }
 
     /**
-     * Поиск товаров с картинками
+     * Поиск товаров через Yandex Image Search API
      *
      * @param string $query Поисковый запрос
      * @return array Массив товаров [{id, imageUrl, title, url, domain, price}]
@@ -65,42 +65,145 @@ class YandexSearchService
         }
 
         try {
-            $searchQuery = $query . ' купить интернет-магазин';
-            $results = $this->performSearch($searchQuery);
+            $searchQuery = $query . ' купить одежда';
+            $results = $this->performImageSearch($searchQuery);
             
-            // Извлекаем изображения из страниц товаров
-            $products = [];
-            $productIndex = 0;
+            return $results;
+
+        } catch (\Exception $e) {
+            Log::error('Yandex image search failed', ['error' => $e->getMessage()]);
+            return $this->getMockProductResults($query);
+        }
+    }
+
+    /**
+     * Выполнение поиска изображений через Yandex Cloud Image Search API
+     */
+    private function performImageSearch(string $query): array
+    {
+        $imageSearchUrl = 'https://searchapi.api.cloud.yandex.net/v2/image/searchAsync';
+        
+        $response = Http::withHeaders([
+            'Authorization' => 'Api-Key ' . $this->apiKeySecret,
+            'Content-Type' => 'application/json',
+        ])->post($imageSearchUrl, [
+            'query' => [
+                'searchType' => 'SEARCH_TYPE_RU',
+                'queryText' => $query,
+                'familyMode' => 'FAMILY_MODE_MODERATE',
+            ],
+            'folderId' => $this->folderId,
+            'responseFormat' => 'FORMAT_XML',
+            'userAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        ]);
+
+        if (!$response->successful()) {
+            Log::warning('Yandex Image API error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+            return [];
+        }
+
+        // API возвращает operation, нужно получить результат
+        $operation = $response->json();
+        
+        if (!isset($operation['id'])) {
+            Log::warning('No operation ID in response', ['response' => $operation]);
+            return [];
+        }
+
+        // Получаем результат операции
+        return $this->getImageOperationResult($operation['id']);
+    }
+
+    /**
+     * Получение результата асинхронной операции поиска изображений
+     */
+    private function getImageOperationResult(string $operationId): array
+    {
+        $maxAttempts = 10;
+        $attempt = 0;
+
+        while ($attempt < $maxAttempts) {
+            $response = Http::withHeaders([
+                'Authorization' => 'Api-Key ' . $this->apiKeySecret,
+            ])->get("https://operation.api.cloud.yandex.net/operations/{$operationId}");
+
+            if (!$response->successful()) {
+                break;
+            }
+
+            $operation = $response->json();
             
-            foreach ($results as $item) {
-                $url = $item['url'] ?? '';
+            if (isset($operation['done']) && $operation['done']) {
+                if (isset($operation['response'])) {
+                    $rawData = $operation['response']['rawData'] ?? '';
+                    return $this->parseImageXmlResponse(base64_decode($rawData));
+                }
+                break;
+            }
+
+            $attempt++;
+            usleep(500000); // 500ms
+        }
+
+        return [];
+    }
+
+    /**
+     * Парсинг XML-ответа Yandex Image Search
+     */
+    private function parseImageXmlResponse(string $xml): array
+    {
+        $results = [];
+
+        try {
+            if (empty($xml)) {
+                return [];
+            }
+
+            $doc = @simplexml_load_string($xml);
+            
+            if (!$doc) {
+                Log::warning('Failed to parse image XML', ['xml' => substr($xml, 0, 500)]);
+                return [];
+            }
+
+            // Парсим результаты из XML формата Yandex Images
+            $index = 0;
+            foreach ($doc->xpath('//group/doc') as $docNode) {
+                $imageUrl = (string) ($docNode->{'image-link'} ?? '');
+                $pageUrl = (string) ($docNode->url ?? '');
+                $title = strip_tags((string) ($docNode->title ?? ''));
+                $domain = parse_url($pageUrl, PHP_URL_HOST) ?: '';
                 
-                // Попробуем извлечь og:image
-                $ogImage = $this->extractOgImage($url);
-                
-                // Пропускаем товары без изображения
-                if (empty($ogImage)) {
+                // Пропускаем если нет изображения
+                if (empty($imageUrl)) {
                     continue;
                 }
                 
-                $products[] = [
-                    'id' => 'yandex-' . $productIndex,
-                    'imageUrl' => $ogImage,
-                    'title' => $item['title'] ?? '',
-                    'url' => $url,
-                    'domain' => $item['domain'] ?? '',
+                $results[] = [
+                    'id' => 'yandex-img-' . $index,
+                    'imageUrl' => $imageUrl,
+                    'title' => $title ?: 'Товар',
+                    'url' => $pageUrl,
+                    'domain' => str_replace('www.', '', $domain),
                     'price' => null,
                 ];
                 
-                $productIndex++;
+                $index++;
+                
+                // Ограничиваем количество результатов
+                if ($index >= 20) {
+                    break;
+                }
             }
-            
-            return $products;
-
         } catch (\Exception $e) {
-            Log::error('Yandex product search failed', ['error' => $e->getMessage()]);
-            return $this->getMockProductResults($query);
+            Log::error('Image XML parse error', ['error' => $e->getMessage()]);
         }
+
+        return $results;
     }
 
     /**
