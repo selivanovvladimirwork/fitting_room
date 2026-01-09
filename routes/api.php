@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ProfileDataController;
 use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\FavoriteExternalShopController;
+use App\Http\Controllers\Api\SavedLookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -93,5 +94,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/favorite-external-shops', [FavoriteExternalShopController::class, 'store']);
     Route::delete('/favorite-external-shops/{domain}', [FavoriteExternalShopController::class, 'destroy']);
     Route::post('/favorite-external-shops/check', [FavoriteExternalShopController::class, 'check']);
+    
+    // Saved Looks (Гардероб - сохранённые генерации)
+    Route::get('/saved-looks', [SavedLookController::class, 'index']);
+    Route::post('/saved-looks', [SavedLookController::class, 'store']);
+    Route::delete('/saved-looks/{id}', [SavedLookController::class, 'destroy']);
 });
 

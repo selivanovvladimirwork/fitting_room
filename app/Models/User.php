@@ -131,4 +131,12 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasMany(FavoriteExternalShop::class);
     }
+
+    /**
+     * Сохранённые образы (гардероб)
+     */
+    public function savedLooks(): HasMany
+    {
+        return $this->hasMany(SavedLook::class);
+    }
 }
