@@ -43,10 +43,20 @@ export interface Shop {
   id: number;
   name: string;
   slug: string;
+  domain?: string;
   logoUrl?: string;
   externalUrl?: string;
   description?: string;
+  category?: string;
   postsCount?: number;
+}
+
+// Результат поиска магазинов
+export interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  domain: string;
 }
 
 export interface PostMedia {

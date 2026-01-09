@@ -217,10 +217,29 @@ export const generationApi = {
     },
 };
 
+// ==================== Search API ====================
+export const searchApi = {
+    async searchShops(query: string) {
+        const response = await fetch(`${API_BASE}/search`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ query }),
+        });
+        return handleResponse<{ title: string; url: string; snippet: string; domain: string }[]>(response);
+    },
+};
+
 // ==================== Shops API ====================
 export const shopsApi = {
     async getAll() {
         const response = await fetch(`${API_BASE}/shops`, {
+            headers: getHeaders(),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async getPopular() {
+        const response = await fetch(`${API_BASE}/shops/popular`, {
             headers: getHeaders(),
         });
         return handleResponse<any[]>(response);

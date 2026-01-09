@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Post } from '../types';
+import { Post, Shop } from '../types';
 import PostCard from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
 import { DigitalTwin } from '../types';
 import VirtualFitView from './VirtualFitView';
-import { postsApi, wardrobeApi } from '../services/api';
+import { postsApi, wardrobeApi, shopsApi } from '../services/api';
 
 interface HomeViewProps {
   onStart: () => void;
@@ -24,6 +24,7 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
   const [showGeneration, setShowGeneration] = useState(true);
   const [curatedPosts, setCuratedPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [favoriteShops, setFavoriteShops] = useState<Shop[]>([]);
 
   // Handle external initial fitting post
   useEffect(() => {
@@ -53,11 +54,13 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [wardrobeData, postsData] = await Promise.all([
+        const [wardrobeData, postsData, shopsData] = await Promise.all([
           wardrobeApi.getAll().catch(() => []),
           postsApi.getAll().catch(() => []),
+          isAuthenticated ? shopsApi.getFavorites().catch(() => []) : Promise.resolve([]),
         ]);
         setWardrobe(wardrobeData);
+        setFavoriteShops(shopsData);
         // Use API data if available, otherwise use mock data
         const MOCK_POSTS: Post[] = [
           { id: 'h1', imageUrl: '/mock/uploaded_image_0_1767382693233.png', author: '@vogue_edge', likes: 3200, isPrivate: false, tags: ['Minimal'] },
@@ -270,6 +273,47 @@ const HomeView: React.FC<HomeViewProps & { userReferences?: string[], initialFit
           </div>
         </div>
       </div>
+
+      {/* 3. Мои магазины */}
+      {isAuthenticated && (
+        <div className="mb-16">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl md:text-3xl font-thin tracking-widest uppercase">Мои магазины</h2>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+            {favoriteShops.length > 0 ? (
+              favoriteShops.map(shop => (
+                <div
+                  key={shop.id}
+                  onClick={() => shop.externalUrl && window.open(shop.externalUrl, '_blank', 'noopener,noreferrer')}
+                  className="flex-shrink-0 w-[140px] md:w-[180px] bg-white rounded-2xl p-4 border border-gray-100 hover:border-black/20 hover:shadow-lg transition-all cursor-pointer group"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mb-3 group-hover:bg-black group-hover:text-white transition-all">
+                    <span className="text-xl">🏪</span>
+                  </div>
+                  <h3 className="font-bold text-sm truncate">{shop.name}</h3>
+                  <p className="text-[10px] text-gray-400 truncate">{shop.domain || shop.externalUrl}</p>
+                </div>
+              ))
+            ) : (
+              <div className="flex-shrink-0 w-full max-w-md bg-gray-50 rounded-2xl p-6 text-center">
+                <p className="text-sm text-gray-400">Пока нет избранных магазинов</p>
+                <p className="text-xs text-gray-300 mt-1">Используйте поиск, чтобы найти и добавить магазины</p>
+              </div>
+            )}
+            {/* Кнопка добавить */}
+            <div
+              onClick={() => window.location.hash = '#/feed'}
+              className="flex-shrink-0 w-[140px] md:w-[180px] bg-gray-50 rounded-2xl p-4 border-2 border-dashed border-gray-200 hover:border-black/30 transition-all cursor-pointer flex flex-col items-center justify-center group"
+            >
+              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center mb-2 group-hover:bg-black group-hover:text-white transition-all">
+                <span className="text-lg">+</span>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-black">Найти</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inline Generation Block */}
       {showGeneration && (
