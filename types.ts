@@ -59,6 +59,16 @@ export interface SearchResult {
   domain: string;
 }
 
+// Результат поиска товаров (с картинками)
+export interface ProductSearchResult {
+  id: string;
+  imageUrl: string;
+  title: string;
+  url: string;
+  domain: string;
+  price?: string;
+}
+
 export interface PostMedia {
   url: string;
   type: 'image' | 'video';

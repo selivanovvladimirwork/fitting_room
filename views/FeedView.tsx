@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Post, SearchResult } from '../types';
+import { Post, SearchResult, ProductSearchResult } from '../types';
 import PostCard from '../components/PostCard';
-import { postsApi, searchApi, shopsApi } from '../services/api';
+import { postsApi, searchApi } from '../services/api';
 
 interface FeedViewProps {
   onSelectPost: (post: Post, list: Post[]) => void;
@@ -31,8 +31,9 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
   const [searchMode, setSearchMode] = useState<SearchMode>('posts');
   const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [shopResults, setShopResults] = useState<SearchResult[]>([]);
+  const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSearchingShops, setIsSearchingShops] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Load posts from API
   useEffect(() => {
@@ -50,11 +51,27 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
     loadPosts();
   }, []);
 
-  // Search shops when mode is 'shops' and query changes
+  // Search products when mode is 'posts' and query is entered
+  const searchProducts = useCallback(async (query: string) => {
+    if (!query.trim()) return;
+
+    setIsSearching(true);
+    try {
+      const results = await searchApi.searchProducts(query);
+      setProductResults(results);
+    } catch (error) {
+      console.error('Product search failed:', error);
+      setProductResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  // Search shops when mode is 'shops'
   const searchShops = useCallback(async (query: string) => {
     if (!query.trim() || searchMode !== 'shops') return;
 
-    setIsSearchingShops(true);
+    setIsSearching(true);
     try {
       const results = await searchApi.searchShops(query);
       setShopResults(results);
@@ -62,42 +79,61 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
       console.error('Shop search failed:', error);
       setShopResults([]);
     } finally {
-      setIsSearchingShops(false);
+      setIsSearching(false);
     }
   }, [searchMode]);
 
-  // Debounced shop search
+  // Debounced search
   useEffect(() => {
-    if (searchMode !== 'shops' || !searchQuery.trim()) {
+    if (!searchQuery.trim()) {
       setShopResults([]);
+      setProductResults([]);
       return;
     }
 
     const timer = setTimeout(() => {
-      searchShops(searchQuery);
+      if (searchMode === 'posts') {
+        searchProducts(searchQuery);
+      } else {
+        searchShops(searchQuery);
+      }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, searchMode, searchShops]);
+  }, [searchQuery, searchMode, searchProducts, searchShops]);
 
-  const filteredPosts = useMemo(() => {
+  // Convert product results to Post format for display
+  const productPosts = useMemo((): Post[] => {
+    return productResults.map(p => ({
+      id: p.id,
+      imageUrl: p.imageUrl,
+      author: `@${p.domain}`,
+      likes: 0,
+      isPrivate: false,
+      tags: [p.price || 'Товар'],
+      title: p.title,
+      storeUrl: p.url, // Add storeUrl for "Buy" button
+    }));
+  }, [productResults]);
+
+  // Show local posts if no search query, else show product results
+  const displayPosts = useMemo(() => {
     if (!searchQuery.trim()) return allPosts;
-    const query = searchQuery.toLowerCase();
-    return allPosts.filter(post =>
-      post.author.toLowerCase().includes(query) ||
-      post.tags.some(tag => tag.toLowerCase().includes(query))
-    );
-  }, [searchQuery, allPosts]);
+    return productPosts;
+  }, [searchQuery, allPosts, productPosts]);
 
   const handleShopClick = (result: SearchResult) => {
-    // Открываем внешний сайт в новой вкладке
     window.open(result.url, '_blank', 'noopener,noreferrer');
   };
 
   const handleModeChange = (mode: SearchMode) => {
     setSearchMode(mode);
-    if (mode === 'shops' && searchQuery.trim()) {
-      searchShops(searchQuery);
+    if (searchQuery.trim()) {
+      if (mode === 'shops') {
+        searchShops(searchQuery);
+      } else {
+        searchProducts(searchQuery);
+      }
     }
   };
 
@@ -116,7 +152,7 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Стили, бренды, магазины..."
+            placeholder="Платье, куртка, джинсы..."
             className="w-full pl-16 md:pl-20 pr-6 md:pr-8 py-5 md:py-6 liquid-glass rounded-full text-lg md:text-xl font-light tracking-tight placeholder-gray-400 focus:outline-none focus:ring-8 focus:ring-black/5 transition-all shadow-lg"
           />
           {searchQuery && (
@@ -129,7 +165,7 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
           )}
         </div>
 
-        {/* Фильтр Образы/Магазины - появляется только после ввода запроса */}
+        {/* Фильтр Образы/Магазины */}
         {hasQuery && (
           <div className="flex gap-2 mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
             <button
@@ -158,30 +194,31 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
         {hasQuery && (
           <p className="text-[10px] md:text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">
             {searchMode === 'posts'
-              ? `${filteredPosts.length} образов найдено`
+              ? `${displayPosts.length} товаров найдено`
               : `${shopResults.length} магазинов найдено`}
           </p>
         )}
       </div>
 
       {/* Контент в зависимости от режима */}
-      {isLoading || isSearchingShops ? (
+      {isLoading || isSearching ? (
         <div className="flex flex-col items-center justify-center py-40">
           <div className="w-12 h-12 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
           <p className="mt-4 text-sm text-gray-400">Загрузка...</p>
         </div>
       ) : searchMode === 'posts' ? (
-        // Режим "Образы"
-        filteredPosts.length > 0 ? (
+        // Режим "Образы" - показываем товары или локальные посты
+        displayPosts.length > 0 ? (
           <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 w-full px-1 md:px-0 space-y-2 md:space-y-4">
-            {filteredPosts.map(post => (
+            {displayPosts.map(post => (
               <div key={post.id} className="break-inside-avoid mb-2 md:mb-4">
                 <PostCard
                   post={post}
-                  onClick={(p) => onSelectPost(p, filteredPosts)}
+                  onClick={(p) => onFitPost(p)}
                   onFitClick={(e, p) => onFitPost(p)}
                   onAuthorClick={onNavigateToProfile}
                   hideActions={true}
+                  storeUrl={(post as any).storeUrl}
                 />
               </div>
             ))}

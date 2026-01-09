@@ -10,9 +10,10 @@ interface PostCardProps {
   onAuthorClick?: (author: string) => void;
   onSaveClick?: (post: Post) => void;
   hideActions?: boolean;
+  storeUrl?: string; // URL для кнопки "Купить"
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, onClick, onFitClick, onAuthorClick, onSaveClick, hideActions }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, onClick, onFitClick, onAuthorClick, onSaveClick, hideActions, storeUrl }) => {
   const { requireAuth } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -128,9 +129,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick, onFitClick, onAuthor
                 ПРИМЕРИТЬ
               </button>
               <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (storeUrl) window.open(storeUrl, '_blank', 'noopener,noreferrer');
+                }}
                 className="w-full py-2.5 bg-white text-black rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-100 active:scale-95 transition-all duration-300"
               >
-                К ТОВАРУ
+                {storeUrl ? '🛍️ КУПИТЬ' : 'К ТОВАРУ'}
               </button>
             </div>
           )}
@@ -180,10 +185,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick, onFitClick, onAuthor
               ПРИМЕРИТЬ
             </button>
             <button
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (storeUrl) window.open(storeUrl, '_blank', 'noopener,noreferrer');
+              }}
               className="w-full py-2.5 bg-white border border-gray-200 text-black rounded-full text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-all"
             >
-              К ТОВАРУ
+              {storeUrl ? '🛍️ КУПИТЬ' : 'К ТОВАРУ'}
             </button>
           </div>
         )}

@@ -227,6 +227,15 @@ export const searchApi = {
         });
         return handleResponse<{ title: string; url: string; snippet: string; domain: string }[]>(response);
     },
+
+    async searchProducts(query: string) {
+        const response = await fetch(`${API_BASE}/search/products`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ query }),
+        });
+        return handleResponse<{ id: string; imageUrl: string; title: string; url: string; domain: string; price?: string }[]>(response);
+    },
 };
 
 // ==================== Shops API ====================
