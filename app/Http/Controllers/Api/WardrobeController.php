@@ -98,7 +98,7 @@ class WardrobeController extends Controller
             if (str_starts_with($firstImage, 'http://') || str_starts_with($firstImage, 'https://')) {
                 $imageUrl = $firstImage;
             } else {
-                $imageUrl = url('storage/' . $firstImage);
+                $imageUrl = url('cors-storage/' . $firstImage);
             }
         }
         
