@@ -146,4 +146,104 @@ class YandexSearchService
                    true; // Возвращаем все, если совпадений нет
         }));
     }
+
+    /**
+     * Поиск товаров с картинками через Yandex
+     *
+     * @param string $query Поисковый запрос
+     * @return array Массив товаров [{id, imageUrl, title, url, domain, price}]
+     */
+    public function searchProducts(string $query): array
+    {
+        // Пока используем mock-данные с реальными картинками
+        // В будущем можно подключить Yandex Images API
+        return $this->getMockProductResults($query);
+    }
+
+    /**
+     * Mock-данные товаров с картинками для тестирования
+     */
+    private function getMockProductResults(string $query): array
+    {
+        $queryLower = mb_strtolower($query);
+        
+        // Товары с реальными картинками (placeholder images)
+        $products = [
+            [
+                'id' => 'yandex-1',
+                'imageUrl' => 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=400&h=600&fit=crop',
+                'title' => 'Элегантное платье',
+                'url' => 'https://www.lamoda.ru/p/mp002xw0q1j6/clothes-love-republic-plate/',
+                'domain' => 'lamoda.ru',
+                'price' => '4 990 ₽',
+            ],
+            [
+                'id' => 'yandex-2',
+                'imageUrl' => 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=600&fit=crop',
+                'title' => 'Джинсовая куртка',
+                'url' => 'https://www.wildberries.ru/catalog/12345678/detail.aspx',
+                'domain' => 'wildberries.ru',
+                'price' => '3 299 ₽',
+            ],
+            [
+                'id' => 'yandex-3',
+                'imageUrl' => 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=600&fit=crop',
+                'title' => 'Кожаная куртка',
+                'url' => 'https://www.zara.com/ru/ru/kozhannaya-kurtka-p00706305.html',
+                'domain' => 'zara.com',
+                'price' => '12 990 ₽',
+            ],
+            [
+                'id' => 'yandex-4',
+                'imageUrl' => 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&h=600&fit=crop',
+                'title' => 'Летнее платье макси',
+                'url' => 'https://www.ozon.ru/product/plate-zhenskoe-123456/',
+                'domain' => 'ozon.ru',
+                'price' => '2 499 ₽',
+            ],
+            [
+                'id' => 'yandex-5',
+                'imageUrl' => 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=600&fit=crop',
+                'title' => 'Блейзер оверсайз',
+                'url' => 'https://lime-shop.com/ru_ru/product/blayzer-oversize',
+                'domain' => 'lime-shop.com',
+                'price' => '7 990 ₽',
+            ],
+            [
+                'id' => 'yandex-6',
+                'imageUrl' => 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&h=600&fit=crop',
+                'title' => 'Классические брюки',
+                'url' => 'https://www2.hm.com/ru_ru/productpage.html',
+                'domain' => 'hm.com',
+                'price' => '1 999 ₽',
+            ],
+            [
+                'id' => 'yandex-7',
+                'imageUrl' => 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&h=600&fit=crop',
+                'title' => 'Вечернее платье',
+                'url' => 'https://www.lamoda.ru/p/evening-dress/',
+                'domain' => 'lamoda.ru',
+                'price' => '8 990 ₽',
+            ],
+            [
+                'id' => 'yandex-8',
+                'imageUrl' => 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&h=600&fit=crop',
+                'title' => 'Пуховик зимний',
+                'url' => 'https://www.wildberries.ru/catalog/87654321/detail.aspx',
+                'domain' => 'wildberries.ru',
+                'price' => '9 499 ₽',
+            ],
+        ];
+
+        // Фильтруем по запросу (простой поиск)
+        if (!empty($queryLower) && $queryLower !== 'все' && $queryLower !== 'all') {
+            $products = array_filter($products, function ($p) use ($queryLower) {
+                return mb_strpos(mb_strtolower($p['title']), $queryLower) !== false ||
+                       mb_strpos(mb_strtolower($p['domain']), $queryLower) !== false;
+            });
+        }
+
+        return array_values($products);
+    }
 }
+

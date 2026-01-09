@@ -30,6 +30,7 @@ Route::get('/shops', [ShopController::class, 'index']);
 Route::get('/shops/popular', [ShopController::class, 'popular']);
 Route::get('/shops/{slug}', [ShopController::class, 'show']);
 Route::post('/search', [SearchController::class, 'search']);
+Route::post('/search/products', [SearchController::class, 'searchProducts']);
 
 // Защищённые роуты (требуют аутентификации)
 Route::middleware('auth:sanctum')->group(function () {

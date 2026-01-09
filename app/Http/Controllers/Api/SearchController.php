@@ -34,4 +34,24 @@ class SearchController extends Controller
 
         return response()->json($results);
     }
+
+    /**
+     * Поиск товаров с картинками
+     * POST /api/search/products
+     * 
+     * @param Request $request { query: string }
+     * @return JsonResponse [{ id, imageUrl, title, url, domain, price }]
+     */
+    public function searchProducts(Request $request): JsonResponse
+    {
+        $request->validate([
+            'query' => 'required|string|min:1|max:200',
+        ]);
+
+        $query = $request->input('query');
+        $results = $this->searchService->searchProducts($query);
+
+        return response()->json($results);
+    }
 }
+
