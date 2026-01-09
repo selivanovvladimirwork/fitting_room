@@ -64,14 +64,31 @@ class YandexSearchService
             return $this->getMockProductResults($query);
         }
 
+        // Placeholder изображения для fallback
+        $placeholders = [
+            'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=400&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&h=600&fit=crop',
+        ];
+
         try {
             $searchQuery = $query . ' купить интернет-магазин';
             $results = $this->performSearch($searchQuery);
             
-            return array_map(function ($item, $index) {
+            return array_map(function ($item, $index) use ($placeholders) {
+                // Используем empty() для проверки пустой строки
+                $imageUrl = !empty($item['imageUrl']) 
+                    ? $item['imageUrl'] 
+                    : $placeholders[$index % count($placeholders)];
+                
                 return [
                     'id' => 'yandex-' . $index,
-                    'imageUrl' => $item['imageUrl'] ?? 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=600&fit=crop',
+                    'imageUrl' => $imageUrl,
                     'title' => $item['title'] ?? '',
                     'url' => $item['url'] ?? '',
                     'domain' => $item['domain'] ?? '',
