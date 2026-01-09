@@ -108,6 +108,8 @@ class YandexSearchService
         // API возвращает operation, нужно получить результат
         $operation = $response->json();
         
+        Log::info('Image Search operation started', ['operation' => $operation]);
+        
         if (!isset($operation['id'])) {
             Log::warning('No operation ID in response', ['response' => $operation]);
             return [];
@@ -137,9 +139,17 @@ class YandexSearchService
             $operation = $response->json();
             
             if (isset($operation['done']) && $operation['done']) {
+                Log::info('Image operation completed', ['operation' => $operation]);
+                
                 if (isset($operation['response'])) {
                     $rawData = $operation['response']['rawData'] ?? '';
-                    return $this->parseImageXmlResponse(base64_decode($rawData));
+                    $xml = base64_decode($rawData);
+                    Log::info('Image XML received', ['xml_length' => strlen($xml), 'xml_start' => substr($xml, 0, 500)]);
+                    return $this->parseImageXmlResponse($xml);
+                }
+                
+                if (isset($operation['error'])) {
+                    Log::error('Image operation error', ['error' => $operation['error']]);
                 }
                 break;
             }
@@ -166,9 +176,12 @@ class YandexSearchService
             $doc = @simplexml_load_string($xml);
             
             if (!$doc) {
-                Log::warning('Failed to parse image XML', ['xml' => substr($xml, 0, 500)]);
+                Log::warning('Failed to parse image XML', ['xml' => substr($xml, 0, 1000)]);
                 return [];
             }
+            
+            // Логируем структуру XML для отладки
+            Log::info('Image XML parsed', ['groups' => count($doc->xpath('//group')), 'docs' => count($doc->xpath('//doc'))]);
 
             // Парсим результаты из XML формата Yandex Images
             $index = 0;
