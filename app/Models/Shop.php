@@ -28,6 +28,11 @@ class Shop extends Model
         return $this->hasMany(Post::class);
     }
 
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
+
     public function favoritedBy(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'favorite_shops')->withTimestamps();

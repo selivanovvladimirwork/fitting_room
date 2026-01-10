@@ -52,6 +52,7 @@ class WardrobeController extends Controller
             'image_url' => 'required|string',
             'title' => 'nullable|string|max:255',
             'brand' => 'nullable|string|max:100',
+            'store_url' => 'nullable|string|max:500',
         ]);
 
         // Создаём как приватный продукт пользователя
@@ -63,6 +64,7 @@ class WardrobeController extends Controller
             'brand' => $validated['brand'] ?? 'Моя вещь',
             'images' => [$imagePath],
             'user_id' => $request->user()->id,
+            'store_url' => $validated['store_url'] ?? null,
         ]);
 
         return response()->json($this->formatProduct($product), 201);
@@ -109,6 +111,7 @@ class WardrobeController extends Controller
             'likes' => 0,
             'isPrivate' => (bool) $product->user_id,
             'tags' => ['Virtual Fit'],
+            'storeUrl' => $product->store_url,
         ];
     }
 }

@@ -64,6 +64,14 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * Примерочная пользователя (товары из wardrobe)
+     */
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    /**
      * Цифровые двойники пользователя
      */
     public function digitalTwins(): HasMany

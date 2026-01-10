@@ -94,6 +94,9 @@ class UserResource extends Resource
     {
         return [
             RelationManagers\DigitalTwinsRelationManager::class,
+            RelationManagers\PostsRelationManager::class,
+            RelationManagers\ProductsRelationManager::class,
+            RelationManagers\SavedLooksRelationManager::class,
         ];
     }
 
