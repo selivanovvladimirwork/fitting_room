@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
-    protected $fillable = ['name_ru', 'brand', 'images', 'store_url', 'user_id', 'shop_id'];
+    protected $fillable = ['name_ru', 'brand', 'images', 'store_url', 'user_id', 'shop_id', 'brand_id'];
 
     protected $casts = [
         'images' => 'array',
@@ -22,6 +22,11 @@ class Product extends Model
     public function shop(): BelongsTo
     {
         return $this->belongsTo(Shop::class);
+    }
+
+    public function brandRelation(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class, 'brand_id');
     }
 
     public function posts(): HasMany

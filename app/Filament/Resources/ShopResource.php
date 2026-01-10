@@ -24,6 +24,8 @@ class ShopResource extends Resource
     protected static ?string $navigationLabel = 'Магазины';
     
     protected static ?string $navigationGroup = 'Каталог';
+    
+    protected static ?int $navigationSort = 1; // Магазины первые в группе "Каталог"
 
     public static function form(Form $form): Form
     {
@@ -36,11 +38,13 @@ class ShopResource extends Resource
                             ->required()
                             ->maxLength(255),
                         Forms\Components\TextInput::make('slug')
-                            ->label('Slug')
+                            ->label('URL-slug')
+                            ->helperText('Для ссылки на страницу магазина')
                             ->unique(ignoreRecord: true)
                             ->maxLength(255),
                         Forms\Components\TextInput::make('domain')
                             ->label('Домен')
+                            ->helperText('Например: ozon.ru')
                             ->maxLength(255),
                         Forms\Components\TextInput::make('external_url')
                             ->label('Ссылка на магазин')
@@ -49,6 +53,7 @@ class ShopResource extends Resource
                     ])->columns(2),
                     
                 Forms\Components\Section::make('Оформление')
+                    ->description('Логотип и описание отображаются на странице магазина')
                     ->schema([
                         Forms\Components\FileUpload::make('logo_url')
                             ->label('Логотип')
@@ -57,17 +62,16 @@ class ShopResource extends Resource
                         Forms\Components\Textarea::make('description')
                             ->label('Описание')
                             ->rows(3),
-                        Forms\Components\TextInput::make('category')
-                            ->label('Категория')
-                            ->maxLength(100),
                     ]),
                     
-                Forms\Components\Section::make('Настройки')
+                Forms\Components\Section::make('Настройки отображения')
+                    ->description('Популярные магазины отображаются на главной странице')
                     ->schema([
                         Forms\Components\Toggle::make('is_popular')
-                            ->label('Популярный магазин'),
+                            ->label('Показывать на главной'),
                         Forms\Components\TextInput::make('sort_order')
                             ->label('Порядок сортировки')
+                            ->helperText('Меньше = выше в списке')
                             ->numeric()
                             ->default(0),
                     ])->columns(2),
