@@ -25,20 +25,21 @@ class GenerationController extends Controller
         }
 
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $apiKey,
-                'HTTP-Referer' => $request->header('Origin') ?? config('app.url'),
-                'X-Title' => 'AI Fitting Room',
-                'Content-Type' => 'application/json',
-            ])->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => $request->model,
-                'messages' => $request->messages,
-                'modalities' => ["image", "text"],
-            ]);
+            $response = Http::timeout(120)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiKey,
+                    'HTTP-Referer' => $request->header('Origin') ?? config('app.url'),
+                    'X-Title' => 'AI Fitting Room',
+                    'Content-Type' => 'application/json',
+                ])->post('https://openrouter.ai/api/v1/chat/completions', [
+                    'model' => $request->model,
+                    'messages' => $request->messages,
+                    'modalities' => ["image", "text"],
+                ]);
 
             if (!$response->successful()) {
-                Log::error('OpenRouter API Error', ['body' => $response->body()]);
-                return response()->json(['error' => 'Generation failed: ' . $response->body()], $response->status());
+                Log::error('OpenRouter API Error', ['body' => substr($response->body(), 0, 500)]);
+                return response()->json(['error' => 'Generation failed: ' . substr($response->body(), 0, 200)], $response->status());
             }
 
             return $response->json();
