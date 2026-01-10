@@ -18,12 +18,11 @@ class WardrobeController extends Controller
         $this->imageService = $imageService;
     }
     /**
-     * Получить гардероб пользователя (только сохранённые генерации)
+     * Получить гардероб пользователя (все добавленные в Примерочную)
      */
     public function index(Request $request): JsonResponse
     {
         $products = Product::where('user_id', $request->user()->id)
-            ->where('brand', 'Virtual Fit') // Только сохранённые результаты генерации
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(fn($p) => $this->formatProduct($p));
