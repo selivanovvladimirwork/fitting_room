@@ -131,8 +131,8 @@ class DigitalTwinController extends Controller
         return [
             'id' => (string) $avatar->id,
             'name' => $avatar->name,
-            'referenceImages' => $avatar->image_url ? [$avatar->image_url] : [],
-            'generatedAvatarUrl' => $avatar->generated_avatar_url,
+            'referenceImages' => $avatar->image_url ? [$this->toFullUrl($avatar->image_url)] : [],
+            'generatedAvatarUrl' => $this->toFullUrl($avatar->generated_avatar_url),
             'stats' => [
                 'height' => $avatar->height,
                 'weight' => $avatar->weight,
@@ -141,5 +141,23 @@ class DigitalTwinController extends Controller
                 'hips' => $avatar->hips,
             ],
         ];
+    }
+
+    /**
+     * Преобразовать относительный путь или URL в полный URL
+     */
+    private function toFullUrl(?string $path): ?string
+    {
+        if (empty($path)) {
+            return null;
+        }
+
+        // Если уже полный URL - возвращаем как есть
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        // Относительный путь - добавляем Storage URL
+        return asset('storage/' . $path);
     }
 }
