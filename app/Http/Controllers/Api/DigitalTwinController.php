@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DigitalTwin;
+use App\Models\DigitalTwinImage;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -17,12 +18,14 @@ class DigitalTwinController extends Controller
     {
         $this->imageService = $imageService;
     }
+
     /**
      * Получить аватары текущего пользователя
      */
     public function index(Request $request): JsonResponse
     {
         $avatars = $request->user()->digitalTwins()
+            ->with('images')
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(fn($a) => $this->formatAvatar($a));
@@ -37,7 +40,7 @@ class DigitalTwinController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'referenceImages' => 'sometimes|array',  // Необязательный
+            'referenceImages' => 'sometimes|array|max:5',
             'referenceImages.*' => 'string',
             'stats' => 'required|array',
             'stats.height' => 'required|integer|min:100|max:250',
@@ -47,17 +50,10 @@ class DigitalTwinController extends Controller
             'stats.hips' => 'required|integer|min:50|max:200',
         ]);
 
-        // Первое изображение как основное (если есть)
-        $imagePath = null;
-        $referenceImages = $validated['referenceImages'] ?? [];
-        if (!empty($referenceImages) && !empty($referenceImages[0])) {
-            $imagePath = $this->imageService->saveFromBase64($referenceImages[0], 'avatars');
-        }
-
+        // Создаём аватар
         $avatar = DigitalTwin::create([
             'user_id' => $request->user()->id,
             'name' => $validated['name'],
-            'image_url' => $imagePath,
             'height' => $validated['stats']['height'],
             'weight' => $validated['stats']['weight'],
             'chest' => $validated['stats']['chest'],
@@ -65,7 +61,22 @@ class DigitalTwinController extends Controller
             'hips' => $validated['stats']['hips'],
         ]);
 
-        return response()->json($this->formatAvatar($avatar), 201);
+        // Сохраняем все изображения
+        $referenceImages = $validated['referenceImages'] ?? [];
+        foreach ($referenceImages as $index => $imageData) {
+            if (!empty($imageData)) {
+                $imagePath = $this->imageService->saveFromBase64($imageData, 'avatars');
+                if ($imagePath) {
+                    DigitalTwinImage::create([
+                        'digital_twin_id' => $avatar->id,
+                        'image_url' => $imagePath,
+                        'sort_order' => $index,
+                    ]);
+                }
+            }
+        }
+
+        return response()->json($this->formatAvatar($avatar->load('images')), 201);
     }
 
     /**
@@ -80,8 +91,8 @@ class DigitalTwinController extends Controller
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
-            'referenceImages' => 'sometimes|array',
-            'referenceImages.*' => 'string',
+            'referenceImages' => 'sometimes|array|max:5',
+            'referenceImages.*' => 'string|nullable',
             'generatedAvatarUrl' => 'sometimes|string|nullable',
             'stats' => 'sometimes|array',
             'stats.height' => 'sometimes|integer|min:100|max:250',
@@ -93,10 +104,6 @@ class DigitalTwinController extends Controller
 
         $updateData = [];
         if (isset($validated['name'])) $updateData['name'] = $validated['name'];
-        if (isset($validated['referenceImages'][0])) {
-            $imagePath = $this->imageService->saveFromBase64($validated['referenceImages'][0], 'avatars');
-            $updateData['image_url'] = $imagePath;
-        }
         if (isset($validated['generatedAvatarUrl'])) $updateData['generated_avatar_url'] = $validated['generatedAvatarUrl'];
         if (isset($validated['stats']['height'])) $updateData['height'] = $validated['stats']['height'];
         if (isset($validated['stats']['weight'])) $updateData['weight'] = $validated['stats']['weight'];
@@ -104,9 +111,41 @@ class DigitalTwinController extends Controller
         if (isset($validated['stats']['waist'])) $updateData['waist'] = $validated['stats']['waist'];
         if (isset($validated['stats']['hips'])) $updateData['hips'] = $validated['stats']['hips'];
 
-        $digitalTwin->update($updateData);
+        if (!empty($updateData)) {
+            $digitalTwin->update($updateData);
+        }
 
-        return response()->json($this->formatAvatar($digitalTwin->fresh()));
+        // Обновляем изображения (если переданы)
+        if (isset($validated['referenceImages'])) {
+            // Удаляем старые и добавляем новые
+            $digitalTwin->images()->delete();
+            
+            foreach ($validated['referenceImages'] as $index => $imageData) {
+                if (!empty($imageData)) {
+                    // Если это уже URL (не base64) - сохраняем как есть
+                    if (str_starts_with($imageData, 'http://') || str_starts_with($imageData, 'https://')) {
+                        // Оставляем как есть (не пересохраняем)
+                        DigitalTwinImage::create([
+                            'digital_twin_id' => $digitalTwin->id,
+                            'image_url' => $imageData,
+                            'sort_order' => $index,
+                        ]);
+                    } else {
+                        // Base64 - сохраняем файл
+                        $imagePath = $this->imageService->saveFromBase64($imageData, 'avatars');
+                        if ($imagePath) {
+                            DigitalTwinImage::create([
+                                'digital_twin_id' => $digitalTwin->id,
+                                'image_url' => $imagePath,
+                                'sort_order' => $index,
+                            ]);
+                        }
+                    }
+                }
+            }
+        }
+
+        return response()->json($this->formatAvatar($digitalTwin->fresh()->load('images')));
     }
 
     /**
@@ -128,10 +167,18 @@ class DigitalTwinController extends Controller
      */
     private function formatAvatar(DigitalTwin $avatar): array
     {
+        // Собираем все изображения из связи images()
+        $referenceImages = $avatar->images->map(fn($img) => $this->toFullUrl($img->image_url))->toArray();
+        
+        // Fallback на старое поле image_url если нет изображений в новой таблице
+        if (empty($referenceImages) && $avatar->image_url) {
+            $referenceImages = [$this->toFullUrl($avatar->image_url)];
+        }
+
         return [
             'id' => (string) $avatar->id,
             'name' => $avatar->name,
-            'referenceImages' => $avatar->image_url ? [$this->toFullUrl($avatar->image_url)] : [],
+            'referenceImages' => $referenceImages,
             'generatedAvatarUrl' => $this->toFullUrl($avatar->generated_avatar_url),
             'stats' => [
                 'height' => $avatar->height,
