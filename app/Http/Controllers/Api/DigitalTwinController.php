@@ -37,7 +37,7 @@ class DigitalTwinController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'referenceImages' => 'required|array|min:1',
+            'referenceImages' => 'sometimes|array',  // Необязательный
             'referenceImages.*' => 'string',
             'stats' => 'required|array',
             'stats.height' => 'required|integer|min:100|max:250',
@@ -47,9 +47,12 @@ class DigitalTwinController extends Controller
             'stats.hips' => 'required|integer|min:50|max:200',
         ]);
 
-        // Первое изображение как основное
-        $imageUrl = $validated['referenceImages'][0] ?? null;
-        $imagePath = $this->imageService->saveFromBase64($imageUrl, 'avatars');
+        // Первое изображение как основное (если есть)
+        $imagePath = null;
+        $referenceImages = $validated['referenceImages'] ?? [];
+        if (!empty($referenceImages) && !empty($referenceImages[0])) {
+            $imagePath = $this->imageService->saveFromBase64($referenceImages[0], 'avatars');
+        }
 
         $avatar = DigitalTwin::create([
             'user_id' => $request->user()->id,
@@ -79,6 +82,7 @@ class DigitalTwinController extends Controller
             'name' => 'sometimes|string|max:255',
             'referenceImages' => 'sometimes|array',
             'referenceImages.*' => 'string',
+            'generatedAvatarUrl' => 'sometimes|string|nullable',
             'stats' => 'sometimes|array',
             'stats.height' => 'sometimes|integer|min:100|max:250',
             'stats.weight' => 'sometimes|integer|min:30|max:300',
@@ -93,6 +97,7 @@ class DigitalTwinController extends Controller
             $imagePath = $this->imageService->saveFromBase64($validated['referenceImages'][0], 'avatars');
             $updateData['image_url'] = $imagePath;
         }
+        if (isset($validated['generatedAvatarUrl'])) $updateData['generated_avatar_url'] = $validated['generatedAvatarUrl'];
         if (isset($validated['stats']['height'])) $updateData['height'] = $validated['stats']['height'];
         if (isset($validated['stats']['weight'])) $updateData['weight'] = $validated['stats']['weight'];
         if (isset($validated['stats']['chest'])) $updateData['chest'] = $validated['stats']['chest'];
@@ -127,6 +132,7 @@ class DigitalTwinController extends Controller
             'id' => (string) $avatar->id,
             'name' => $avatar->name,
             'referenceImages' => $avatar->image_url ? [$avatar->image_url] : [],
+            'generatedAvatarUrl' => $avatar->generated_avatar_url,
             'stats' => [
                 'height' => $avatar->height,
                 'weight' => $avatar->weight,
