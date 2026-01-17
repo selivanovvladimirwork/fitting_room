@@ -209,14 +209,15 @@ class GenerationController extends Controller
         $payload = [
             'model' => 'veo3.1-fast',
             'prompt' => $input['prompt'],
-            'aspectRatio' => '3:4',
-            'generationType' => $hasImages ? 'FIRST_AND_LAST_FRAMES_2_VIDEO' : 'TEXT_2_VIDEO'
+            'aspectRatio' => '9:16', // Вертикальное видео для сторис
+            // IMAGE_2_VIDEO для анимации одного изображения
+            'generationType' => $hasImages ? 'IMAGE_2_VIDEO' : 'TEXT_2_VIDEO'
         ];
 
         // Для видео используем первое изображение как startImage
         if (!empty($input['imageUrls'])) {
             $payload['startImage'] = $input['imageUrls'][0];
-            $payload['imageUrls'] = $input['imageUrls'];
+            // НЕ передаём imageUrls — только startImage для IMAGE_2_VIDEO
         } elseif (!empty($input['imagesBase64'])) {
             // Для Base64 используем startImageBase64 (если поддерживается)
             $payload['startImageBase64'] = $input['imagesBase64'][0];
