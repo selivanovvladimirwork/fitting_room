@@ -36,7 +36,8 @@ class GenerationController extends Controller
         Log::info('Request type detection:', [
             'requested_model' => $requestedModel,
             'is_video' => $isVideo,
-            'images_count' => count($input['images']),
+            'imageUrls_count' => count($input['imageUrls'] ?? []),
+            'imagesBase64_count' => count($input['imagesBase64'] ?? []),
             'prompt_preview' => substr($input['prompt'], 0, 100) . '...'
         ]);
 
