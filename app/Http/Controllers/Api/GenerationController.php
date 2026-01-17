@@ -16,6 +16,7 @@ class GenerationController extends Controller
 
     public function generate(Request $request)
     {
+        set_time_limit(300); // Увеличиваем лимит времени выполнения до 5 минут для polling
         Log::info('=== POLZA.AI GENERATION REQUEST START ===');
         
         $settings = AiApiSetting::getInstance();
