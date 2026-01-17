@@ -34,6 +34,9 @@ Route::get('/shops/{slug}', [ShopController::class, 'show']);
 Route::post('/search', [SearchController::class, 'search']);
 Route::post('/search/products', [SearchController::class, 'searchProducts']);
 
+// Публичный роут для проверки статуса генерации (polling)
+Route::get('/generate/status/{requestId}', [GenerationController::class, 'status']);
+
 // Защищённые роуты (требуют аутентификации)
 Route::middleware('auth:sanctum')->group(function () {
     // Auth
@@ -83,7 +86,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // AI Generation
     Route::post('/generate', [GenerationController::class, 'generate']);
-    Route::get('/generate/status/{requestId}', [GenerationController::class, 'status']);
     
     // Shop Favorites
     Route::get('/shops/favorites', [ShopController::class, 'favorites']);
