@@ -16,7 +16,6 @@ class GenerationController extends Controller
 
     public function generate(Request $request)
     {
-        set_time_limit(300); // Увеличиваем лимит времени выполнения до 5 минут для polling
         Log::info('=== POLZA.AI GENERATION REQUEST START ===');
         
         $settings = AiApiSetting::getInstance();
@@ -144,9 +143,17 @@ class GenerationController extends Controller
                 ->get(self::POLZA_API_BASE . "/{$type}/{$requestId}");
             
             $data = $response->json();
-            $status = $data['status'] ?? 'unknown';
+            $rawStatus = $data['status'] ?? 'unknown';
+            $status = strtoupper(trim((string)$rawStatus));
 
-            if ($status === 'COMPLETED' || $status === 'completed' || $status === 'success') {
+            Log::info("Status check:", [
+                'raw' => $rawStatus,
+                'normalized' => $status,
+                'is_completed' => ($status === 'COMPLETED'),
+                'data_keys' => array_keys($data),
+            ]);
+
+            if ($status === 'COMPLETED' || $status === 'SUCCESS') {
                 $resultUrl = $data['url'] ?? $data['result_url'] ?? $data['resultUrl'] ?? ($data['images'][0]['url'] ?? null);
                 
                 Log::info("Generation completed. URL: " . substr($resultUrl ?? 'null', 0, 50));
@@ -164,7 +171,7 @@ class GenerationController extends Controller
                 ]);
             }
 
-            if ($status === 'FAILED' || $status === 'failed' || $status === 'error') {
+            if ($status === 'FAILED' || $status === 'ERROR') {
                 Log::error("Generation failed", ['data' => $data]);
                 return response()->json(['error' => 'Generation failed: ' . ($data['error'] ?? 'Unknown')], 500);
             }
