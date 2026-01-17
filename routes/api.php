@@ -83,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // AI Generation
     Route::post('/generate', [GenerationController::class, 'generate']);
+    Route::get('/generate/status/{requestId}', [GenerationController::class, 'status']);
     
     // Shop Favorites
     Route::get('/shops/favorites', [ShopController::class, 'favorites']);
