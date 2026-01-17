@@ -104,7 +104,30 @@ class DigitalTwinController extends Controller
 
         $updateData = [];
         if (isset($validated['name'])) $updateData['name'] = $validated['name'];
-        if (isset($validated['generatedAvatarUrl'])) $updateData['generated_avatar_url'] = $validated['generatedAvatarUrl'];
+        
+        // Если пришёл generatedAvatarUrl — скачиваем и сохраняем локально
+        if (isset($validated['generatedAvatarUrl']) && !empty($validated['generatedAvatarUrl'])) {
+            $url = $validated['generatedAvatarUrl'];
+            
+            // Если это внешний URL — скачиваем
+            if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+                try {
+                    $imageContents = file_get_contents($url);
+                    if ($imageContents) {
+                        $filename = 'generated_avatars/' . uniqid('avatar_') . '.jpg';
+                        \Illuminate\Support\Facades\Storage::disk('public')->put($filename, $imageContents);
+                        $updateData['generated_avatar_url'] = $filename;
+                    }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to download generated avatar', ['url' => $url, 'error' => $e->getMessage()]);
+                    // Сохраняем как есть, если не удалось скачать
+                    $updateData['generated_avatar_url'] = $url;
+                }
+            } else {
+                // Это уже локальный путь или base64
+                $updateData['generated_avatar_url'] = $url;
+            }
+        }
         if (isset($validated['stats']['height'])) $updateData['height'] = $validated['stats']['height'];
         if (isset($validated['stats']['weight'])) $updateData['weight'] = $validated['stats']['weight'];
         if (isset($validated['stats']['chest'])) $updateData['chest'] = $validated['stats']['chest'];
