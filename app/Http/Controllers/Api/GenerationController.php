@@ -237,19 +237,26 @@ class GenerationController extends Controller
             'generationConfig' => [
                 'responseModalities' => ['TEXT', 'IMAGE'],
                 'imageConfig' => [
-                    'aspectRatio' => '3:4'  // Вертикальное для примерочной
+                    'aspectRatio' => '3:4',
+                    'imageSize' => '2K'
                 ]
+            ],
+            'safetySettings' => [
+                ['category' => 'HARM_CATEGORY_HARASSMENT', 'threshold' => 'BLOCK_NONE'],
+                ['category' => 'HARM_CATEGORY_HATE_SPEECH', 'threshold' => 'BLOCK_NONE'],
+                ['category' => 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'threshold' => 'BLOCK_NONE'],
+                ['category' => 'HARM_CATEGORY_DANGEROUS_CONTENT', 'threshold' => 'BLOCK_NONE'],
             ]
         ];
 
         Log::info('Sending Image Request to Gemini:', [
-            'model' => 'gemini-2.5-flash-image',
+            'model' => 'gemini-3-pro-image-preview',
             'parts_count' => count($parts),
             'prompt_preview' => substr($input['prompt'], 0, 100)
         ]);
 
         $response = Http::timeout(120)
-            ->post(self::GEMINI_API_BASE . '/models/gemini-2.5-flash-image:generateContent?key=' . $apiKey, $payload);
+            ->post(self::GEMINI_API_BASE . '/models/gemini-3-pro-image-preview:generateContent?key=' . $apiKey, $payload);
 
         if (!$response->successful()) {
             Log::error('Gemini API Error', ['status' => $response->status(), 'body' => $response->body()]);
