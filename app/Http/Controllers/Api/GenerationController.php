@@ -12,7 +12,8 @@ use Illuminate\Support\Str;
 
 class GenerationController extends Controller
 {
-    private const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+    // Cloudflare Worker прокси для обхода географических ограничений
+    private const GEMINI_API_BASE = 'https://curly-butterfly-5085.fixersagency.workers.dev/v1beta';
 
     /**
      * Инициирует генерацию и возвращает результат или requestId для polling.
