@@ -41,7 +41,7 @@ class GenerationController extends Controller
         try {
             // Если есть токен Replicate - используем его (приоритет для видео Veo и Nano Banana)
             // Мы перешли полностью на Replicate
-            $replicateModel = $isVideo ? 'google/veo-3' : 'google/nano-banana';
+            $replicateModel = $isVideo ? 'google/veo-2' : 'google/nano-banana';
             
             return $this->initiateReplicateGeneration($apiKey, $replicateModel, $input, $isVideo);
 
@@ -77,59 +77,44 @@ class GenerationController extends Controller
         // Подготовка входных параметров для Replicate
         // Если это фото, используем IDM-VTON (лучшая модель для примерки на Replicate)
         // Модель: cuuupid/idm-vton
-        if (!$isVideo) {
-             $model = 'cuuupid/idm-vton'; // Или конкретная версия, если нужно
-             
-             // Ищем фото человека и одежды
-             // Обычно фронтенд шлет: [avatar, avatar, avatar, ..., clothes]
-             // Берем ПЕРВОЕ фото как человека, и ПОСЛЕДНЕЕ как одежду.
-             
-             $humanImg = null;
-             $garmImg = null;
-             
-             $allImages = $input['imageUrls'];
-             if (!empty($input['imagesBase64'])) {
-                foreach($input['imagesBase64'] as $img) {
-                    $allImages[] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
-                }
-             }
+        $params = [
+            'prompt' => $input['prompt'],
+        ];
 
-             if (count($allImages) >= 2) {
-                 $humanImg = $allImages[0];
-                 $garmImg = end($allImages);
-             } elseif (count($allImages) == 1) {
-                 // Если только 1 картинка, это странно для примерки, но пусть будет human
-                 $humanImg = $allImages[0];
-             }
+        // Prepare images list
+        $allImages = $input['imageUrls'];
+        if (!empty($input['imagesBase64'])) {
+            foreach($input['imagesBase64'] as $img) {
+                $allImages[] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
+            }
+        }
 
-             if (!$humanImg || !$garmImg) {
-                 Log::warning("Not enough images for IDM-VTON. Needed human and garment.");
-                 // Fallback или ошибка? Попробуем отправить что есть, но модель скорее всего упадет или выдаст ерунду.
-             }
-
-             $params = [
-                 'human_img' => $humanImg,
-                 'garm_img' => $garmImg,
-                 'garment_des' => $input['prompt'], // Используем промпт как описание одежды
-                 'category' => 'upper_body', // Можно попробовать определить из промпта, но upper_body - безопасный дефолт
-                 'steps' => 30, // Качество
-                 'seed' => 42
-             ];
-             
-             // Для Veo (видео) оставляем старую логику
+        if ($isVideo) {
+            // Google Veo 2
+            // Params: prompt, duration, aspect_ratio, image (optional start image)
+            // Model: google/veo-2
+            
+            $params['duration'] = 5; // Default from user example
+            $params['aspect_ratio'] = '16:9'; 
+            
+            // If an image is provided, Veo can use it as start frame
+            if (!empty($allImages)) {
+                $params['image'] = $allImages[0];
+            }
         } else {
-            // ... (Veo logic preserved) ...
-            $params = [
-                'prompt' => $input['prompt'],
-                'video_duration' => '5s',
-                'aspect_ratio' => '9:16',
-                // Veo принимает только 1 картинку (старт видео)
-                'image' => !empty($input['imageUrls']) ? $input['imageUrls'][0] : null 
-            ];
-             if (!empty($input['imagesBase64'])) {
-                 $img = $input['imagesBase64'][0];
-                 $params['image'] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
-             }
+            // Google Nano Banana
+            // Params: prompt, image_input (array), aspect_ratio, output_format
+            // Model: google/nano-banana
+
+            $params['output_format'] = 'jpg';
+            
+            if (!empty($allImages)) {
+                $params['image_input'] = $allImages;
+                $params['aspect_ratio'] = 'match_input_image';
+            } else {
+                // Text to image fallback
+                $params['aspect_ratio'] = '3:4'; 
+            }
         }
 
         Log::info("Sending Replicate Prediction ($model)", ['params_keys' => array_keys($params)]);
