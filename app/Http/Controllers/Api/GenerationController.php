@@ -43,10 +43,10 @@ class GenerationController extends Controller
             // Мы перешли полностью на Replicate
             $replicateModel = $isVideo ? 'kwaivgi/kling-v2.5-turbo-pro' : 'google/nano-banana';
             
-        // Use Replicate token if available, otherwise fallback to generic API key
-        $token = $replicateToken ?: $apiKey;
+            // User requested to use ONLY the admin key (API Key from settings)
+            $token = $apiKey;
             
-        return $this->initiateReplicateGeneration($token, $replicateModel, $input, $isVideo);
+            return $this->initiateReplicateGeneration($token, $replicateModel, $input, $isVideo);
 
         } catch (\Exception $e) {
             Log::error('Generation Exception', [
@@ -65,14 +65,11 @@ class GenerationController extends Controller
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
 
-        $replicateToken = env('REPLICATE_API_TOKEN');
-        $token = $replicateToken ?: $apiKey;
-
-        if (!$token) {
+        if (!$apiKey) {
             return response()->json(['error' => 'API Token not configured'], 500);
         }
 
-        return $this->checkReplicateStatus($token, $requestId);
+        return $this->checkReplicateStatus($apiKey, $requestId);
     }
 
     /**
@@ -102,7 +99,9 @@ class GenerationController extends Controller
             
             $params['duration'] = 5; 
             $params['aspect_ratio'] = '9:16';
-            $params['negative_prompt'] = ""; // Default empty as requested
+            $params['negative_prompt'] = ""; 
+            $params['cfg_scale'] = 0.9; // Increased for better prompt/image adherence
+            $params['mode'] = 'pro'; // Explicitly request pro mode if applicable for this model variant
 
             // If an image is provided, Kling uses 'input_image'
             if (!empty($allImages)) {
