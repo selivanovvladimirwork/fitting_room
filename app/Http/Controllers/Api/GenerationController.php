@@ -103,9 +103,9 @@ class GenerationController extends Controller
             $params['cfg_scale'] = 0.9; // Increased for better prompt/image adherence
             $params['mode'] = 'pro'; // Explicitly request pro mode if applicable for this model variant
 
-            // If an image is provided, Kling uses 'input_image'
+            // If an image is provided, Kling uses 'start_image'
             if (!empty($allImages)) {
-                $params['input_image'] = $allImages[0];
+                $params['start_image'] = $allImages[0];
             }
         } else {
             // Google Nano Banana
