@@ -369,7 +369,7 @@ class GenerationController extends Controller
         ]);
 
         $response = Http::timeout(60)
-            ->post(self::GEMINI_API_BASE . '/models/veo-3.0-generate:generateVideos?key=' . $apiKey, $payload);
+            ->post(self::GEMINI_API_BASE . '/models/veo-3.0-generate:predictLongRunning?key=' . $apiKey, $payload);
 
         if (!$response->successful()) {
             Log::error('Gemini Veo API Error', ['status' => $response->status(), 'body' => $response->body()]);
