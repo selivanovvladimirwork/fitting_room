@@ -41,7 +41,7 @@ class GenerationController extends Controller
         try {
             // Если есть токен Replicate - используем его (приоритет для видео Veo и Nano Banana)
             // Мы перешли полностью на Replicate
-            $replicateModel = $isVideo ? 'google/veo-2' : 'google/nano-banana';
+            $replicateModel = $isVideo ? 'kwaivgi/kling-v2.5-turbo-pro' : 'google/nano-banana';
             
             return $this->initiateReplicateGeneration($apiKey, $replicateModel, $input, $isVideo);
 
@@ -90,16 +90,17 @@ class GenerationController extends Controller
         }
 
         if ($isVideo) {
-            // Google Veo 2
-            // Params: prompt, duration, aspect_ratio, image (optional start image)
-            // Model: google/veo-2
+            // Kling AI v2.5 Turbo Pro
+            // Params: prompt, duration, aspect_ratio, input_image, negative_prompt
+            // Model: kwaivgi/kling-v2.5-turbo-pro
             
-            $params['duration'] = 5; // Default from user example
-            $params['aspect_ratio'] = '16:9'; 
-            
-            // If an image is provided, Veo can use it as start frame
+            $params['duration'] = 5; 
+            $params['aspect_ratio'] = '9:16';
+            $params['negative_prompt'] = ""; // Default empty as requested
+
+            // If an image is provided, Kling uses 'input_image'
             if (!empty($allImages)) {
-                $params['image'] = $allImages[0];
+                $params['input_image'] = $allImages[0];
             }
         } else {
             // Google Nano Banana
