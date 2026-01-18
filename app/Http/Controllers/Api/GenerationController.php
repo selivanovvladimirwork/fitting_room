@@ -38,36 +38,13 @@ class GenerationController extends Controller
         $requestedModel = $request->model;
         $isVideo = str_contains(strtolower($requestedModel ?? ''), 'veo');
         
-        Log::info('Request type detection:', [
-            'requested_model' => $requestedModel,
-            'is_video' => $isVideo,
-            'has_replicate' => !empty($replicateToken),
-            'prompt' => substr($input['prompt'], 0, 50)
-        ]);
-
         try {
             // Если есть токен Replicate - используем его (приоритет для видео Veo и Nano Banana)
-            if ($replicateToken) {
-                if ($isVideo) {
-                    // Видео через Replicate (google/veo-3)
-                    return $this->initiateReplicateGeneration($replicateToken, 'google/veo-3', $input, true);
-                } elseif (str_contains($requestedModel, 'nano-banana') || str_contains($requestedModel, 'flash')) {
-                    // Изображения через Replicate (google/nano-banana) если запрошен флеш/банан
-                    // Или можно форсировать Replicate для всех изображений чтобы обойти квоты Google
-                    // Пока используем для nano-banana
-                    return $this->initiateReplicateGeneration($replicateToken, 'google/nano-banana', $input, false);
-                } elseif ($replicateToken && empty($apiKey)) {
-                    // Если нет ключа Google, но есть Replicate - используем Replicate для всего
-                     return $this->initiateReplicateGeneration($replicateToken, 'google/nano-banana', $input, false);
-                }
-            }
+            // Мы перешли полностью на Replicate
+            $replicateModel = $isVideo ? 'google/veo-3' : 'google/nano-banana';
+            
+            return $this->initiateReplicateGeneration($token, $replicateModel, $input, $isVideo);
 
-            // Fallback to Google Gemini API
-            if ($isVideo) {
-                return $this->initiateVideo($apiKey, $input);
-            } else {
-                return $this->generateImageSync($apiKey, $input);
-            }
         } catch (\Exception $e) {
             Log::error('Generation Exception', [
                 'message' => $e->getMessage(),
