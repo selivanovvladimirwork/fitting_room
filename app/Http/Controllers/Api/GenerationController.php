@@ -43,7 +43,7 @@ class GenerationController extends Controller
             // Мы перешли полностью на Replicate
             $replicateModel = $isVideo ? 'google/veo-3' : 'google/nano-banana';
             
-            return $this->initiateReplicateGeneration($token, $replicateModel, $input, $isVideo);
+            return $this->initiateReplicateGeneration($apiKey, $replicateModel, $input, $isVideo);
 
         } catch (\Exception $e) {
             Log::error('Generation Exception', [
