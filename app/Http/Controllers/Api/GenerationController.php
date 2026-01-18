@@ -75,21 +75,66 @@ class GenerationController extends Controller
     private function initiateReplicateGeneration($token, $model, $input, $isVideo)
     {
         // Подготовка входных параметров для Replicate
-        // Для google/veo-3 и google/nano-banana
+        // Подготовка параметров для Replicate
         $params = [
-            'prompt' => $input['prompt']
+            'prompt' => $input['prompt'],
+            'output_format' => $isVideo ? 'mp4' : 'jpg'
         ];
         
         if ($isVideo) {
-             $params['video_duration'] = '5s'; // Veo param
+             $params['video_duration'] = '5s'; 
+             $params['aspect_ratio'] = '9:16';
+        } else {
+             $params['aspect_ratio'] = '3:4';
+             $params['safety_filter_level'] = 'block_only_high_harmability';
         }
         
-        // Image input
-        if (!empty($input['imageUrls'])) {
-             $params['image'] = $input['imageUrls'][0]; // Replicate принимает URL
-        } elseif (!empty($input['imagesBase64'])) {
-             $img = $input['imagesBase64'][0];
-             $params['image'] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
+        // Обработка изображений для мультимодального ввода
+        // 1. Собираем все ссылки
+        $allImages = $input['imageUrls'];
+        if (!empty($input['imagesBase64'])) {
+            // Replicate лучше работает с URL или dataURI
+            foreach($input['imagesBase64'] as $img) {
+                $allImages[] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
+            }
+        }
+
+        if (!empty($allImages)) {
+            // Стратегия 1: Для известных мультимодальных моделей пробуем передать массив
+            // Но большинство API принимают только 'image'.
+            // Берем ПЕРВУЮ картинку как основную (image)
+            $params['image'] = $allImages[0];
+            
+            // Стратегия 2: Если картинок > 1, пытаемся передать их как additional_images или в промпт
+            if (count($allImages) > 1) {
+                 // Добавляем ссылки в промпт (Gemini часто умеет читать ссылки из текста)
+                 // или если это кастомная модель.
+                 // Для Nano-banana (Gemini) это может не сработать, если она не ходит в интернет.
+                 // Но попробовать стоит.
+            }
+            
+            // EXPERIMENTAL: Для Replicate Gemini часто используется параметр 'images' (array) вместо 'image' (string)
+            // Но если мы используем image-to-video (Veo), там строго 'image'.
+            if (!$isVideo) {
+                // Для фото пробуем передать ВСЕ картинки если параметр поддерживается (игнорируется если нет)
+                // $params['input_images'] = $allImages; 
+            }
+        }
+
+        // ВАЖНО: Если это задача примерки (Virtual Try-On), то нам нужны ВСЕ картинки.
+        // Так как мы не знаем точную спецификацию "google/nano-banana", 
+        // мы добавим описание к промпту, что есть несколько изображений.
+        // И попытаемся передать вторую картинку (одежду) как 'mask' или 'condition_image' на удачу? Нет.
+        
+        // Давайте просто добавим ссылки в промпт, это самый безопасный способ для LLM Vision
+        $imageLinksText = "\n\nReferenced Images:\n";
+        foreach ($allImages as $idx => $url) {
+            if (str_starts_with($url, 'data:')) continue; // Data URI слишком длинные для промпта
+            $imageLinksText .= "Image " . ($idx + 1) . ": " . $url . "\n";
+        }
+        
+        if (count($allImages) > 0) {
+            $params['prompt'] .= $imageLinksText;
         }
 
         Log::info("Sending Replicate Prediction ($model)", ['params' => array_keys($params)]);
