@@ -55,34 +55,18 @@ class GenerationController extends Controller
     }
 
     /**
-     * Проверяет статус генерации video/image.
+     * Проверяет статус генерации video/image (Replicate).
      */
     public function status(Request $request, string $requestId)
     {
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
-        $replicateToken = env('REPLICATE_API_TOKEN');
 
-        // Определяем провайдера по формату ID
-        // Replicate ID: короткая строка (без слешей, 20-30 символов)
-        // Google ID: base64 encoded 'projects/...' (содержит слеши если декодировать, или длинная)
-        
-        $isReplicate = !str_contains(base64_decode($requestId, true) ?: '', 'projects/');
-        // Replicate IDs are plain text, simple check:
-        // Если ID не base64 или декодированный не похож на Google Path
-        if (preg_match('/^[a-z0-9]{10,40}$/i', $requestId)) {
-             $isReplicate = true;
+        if (!$apiKey) {
+            return response()->json(['error' => 'API Token not configured'], 500);
         }
 
-        if ($isReplicate) {
-            if (!$replicateToken) return response()->json(['error' => 'Replicate Token missing'], 500);
-            return $this->checkReplicateStatus($replicateToken, $requestId);
-        }
-
-        // Google Gemini Status Check
-        if (!$apiKey) return response()->json(['error' => 'Google API Key missing'], 500);
-
-        return $this->checkGeminiStatus($request, $apiKey, $requestId);
+        return $this->checkReplicateStatus($apiKey, $requestId);
     }
 
     /**
