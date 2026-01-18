@@ -12,22 +12,25 @@ use Illuminate\Support\Str;
 
 class GenerationController extends Controller
 {
+
     // Cloudflare Worker прокси для обхода географических ограничений
     private const GEMINI_API_BASE = 'https://curly-butterfly-5085.fixersagency.workers.dev/v1beta';
+    private const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
 
     /**
      * Инициирует генерацию и возвращает результат или requestId для polling.
      */
     public function generate(Request $request)
     {
-        Log::info('=== GEMINI API GENERATION REQUEST START ===');
+        Log::info('=== GENERATION REQUEST START ===');
         
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
+        $replicateToken = env('REPLICATE_API_TOKEN'); // Проверяем токен Replicate
 
-        if (!$apiKey) {
-            Log::error('API Key not configured');
-            return response()->json(['error' => 'API Key not configured in backend'], 500);
+        if (!$apiKey && !$replicateToken) {
+            Log::error('API Keys not configured');
+            return response()->json(['error' => 'API Keys not configured in backend'], 500);
         }
 
         $input = $this->parseOpenRouterMessage($request->messages);
@@ -38,12 +41,28 @@ class GenerationController extends Controller
         Log::info('Request type detection:', [
             'requested_model' => $requestedModel,
             'is_video' => $isVideo,
-            'imageUrls_count' => count($input['imageUrls'] ?? []),
-            'imagesBase64_count' => count($input['imagesBase64'] ?? []),
-            'prompt_preview' => substr($input['prompt'], 0, 100) . '...'
+            'has_replicate' => !empty($replicateToken),
+            'prompt' => substr($input['prompt'], 0, 50)
         ]);
 
         try {
+            // Если есть токен Replicate - используем его (приоритет для видео Veo и Nano Banana)
+            if ($replicateToken) {
+                if ($isVideo) {
+                    // Видео через Replicate (google/veo-3)
+                    return $this->initiateReplicateGeneration($replicateToken, 'google/veo-3', $input, true);
+                } elseif (str_contains($requestedModel, 'nano-banana') || str_contains($requestedModel, 'flash')) {
+                    // Изображения через Replicate (google/nano-banana) если запрошен флеш/банан
+                    // Или можно форсировать Replicate для всех изображений чтобы обойти квоты Google
+                    // Пока используем для nano-banana
+                    return $this->initiateReplicateGeneration($replicateToken, 'google/nano-banana', $input, false);
+                } elseif ($replicateToken && empty($apiKey)) {
+                    // Если нет ключа Google, но есть Replicate - используем Replicate для всего
+                     return $this->initiateReplicateGeneration($replicateToken, 'google/nano-banana', $input, false);
+                }
+            }
+
+            // Fallback to Google Gemini API
             if ($isVideo) {
                 return $this->initiateVideo($apiKey, $input);
             } else {
@@ -59,102 +78,147 @@ class GenerationController extends Controller
     }
 
     /**
-     * Проверяет статус генерации видео по operationName.
+     * Проверяет статус генерации video/image.
      */
     public function status(Request $request, string $requestId)
     {
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
+        $replicateToken = env('REPLICATE_API_TOKEN');
 
-        if (!$apiKey) {
-            return response()->json(['error' => 'API Key not configured'], 500);
+        // Определяем провайдера по формату ID
+        // Replicate ID: короткая строка (без слешей, 20-30 символов)
+        // Google ID: base64 encoded 'projects/...' (содержит слеши если декодировать, или длинная)
+        
+        $isReplicate = !str_contains(base64_decode($requestId, true) ?: '', 'projects/');
+        // Replicate IDs are plain text, simple check:
+        // Если ID не base64 или декодированный не похож на Google Path
+        if (preg_match('/^[a-z0-9]{10,40}$/i', $requestId)) {
+             $isReplicate = true;
         }
 
-        $type = $request->query('type', 'images');
-
-        // Для изображений статуса нет — они синхронные
-        if ($type === 'images') {
-            return response()->json(['error' => 'Images are generated synchronously'], 400);
+        if ($isReplicate) {
+            if (!$replicateToken) return response()->json(['error' => 'Replicate Token missing'], 500);
+            return $this->checkReplicateStatus($replicateToken, $requestId);
         }
 
-        Log::info("Checking Veo video status for operation: {$requestId}");
+        // Google Gemini Status Check
+        if (!$apiKey) return response()->json(['error' => 'Google API Key missing'], 500);
 
-        try {
-            // Decode operation name (was base64 encoded for URL safety)
-            $operationName = base64_decode($requestId);
-            
-            $response = Http::get(self::GEMINI_API_BASE . "/{$operationName}", [
-                'key' => $apiKey
-            ]);
-
-            $data = $response->json();
-            
-            Log::info("Veo status response:", [
-                'done' => $data['done'] ?? false,
-                'has_response' => isset($data['response']),
-                'has_error' => isset($data['error'])
-            ]);
-
-            if (isset($data['error'])) {
-                Log::error("Veo generation failed", ['error' => $data['error']]);
-                return response()->json([
-                    'status' => 'failed',
-                    'error' => $data['error']['message'] ?? 'Video generation failed'
-                ], 500);
-            }
-
-            if ($data['done'] ?? false) {
-                // Видео готово — скачиваем и сохраняем
-                $generatedVideos = $data['response']['generatedVideos'] ?? [];
-                
-                if (empty($generatedVideos)) {
-                    return response()->json([
-                        'status' => 'failed',
-                        'error' => 'No videos generated'
-                    ], 500);
-                }
-
-                $video = $generatedVideos[0];
-                $videoFile = $video['video'] ?? null;
-                
-                if (!$videoFile) {
-                    return response()->json([
-                        'status' => 'failed',
-                        'error' => 'Video file not found in response'
-                    ], 500);
-                }
-
-                // Скачиваем видео через Files API
-                $resultUrl = $this->downloadAndSaveVideo($apiKey, $videoFile);
-                
-                Log::info("Video generation completed. URL: " . $resultUrl);
-
-                return response()->json([
-                    'status' => 'completed',
-                    'result_url' => $resultUrl,
-                    'choices' => [[
-                        'message' => [
-                            'content' => null,
-                            'images' => [['image_url' => ['url' => $resultUrl]]]
-                        ]
-                    ]]
-                ]);
-            }
-
-            // Всё ещё в процессе
-            return response()->json([
-                'status' => 'processing',
-                'message' => 'Video generation in progress...'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Status check Exception', ['message' => $e->getMessage()]);
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
+        return $this->checkGeminiStatus($request, $apiKey, $requestId);
     }
 
     /**
-     * Парсит сообщения в формате OpenRouter.
+     * Генерация через Replicate (Generic for Video & Image)
+     */
+    private function initiateReplicateGeneration($token, $model, $input, $isVideo)
+    {
+        // Подготовка входных параметров для Replicate
+        // Для google/veo-3 и google/nano-banana
+        $params = [
+            'prompt' => $input['prompt']
+        ];
+        
+        if ($isVideo) {
+             $params['video_duration'] = '5s'; // Veo param
+        }
+        
+        // Image input
+        if (!empty($input['imageUrls'])) {
+             $params['image'] = $input['imageUrls'][0]; // Replicate принимает URL
+        } elseif (!empty($input['imagesBase64'])) {
+             $img = $input['imagesBase64'][0];
+             $params['image'] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
+        }
+
+        Log::info("Sending Replicate Prediction ($model)", ['params' => array_keys($params)]);
+
+        $response = Http::withToken($token)
+            ->post(self::REPLICATE_API_BASE . "/models/{$model}/predictions", [
+                'input' => $params
+            ]);
+
+        if (!$response->successful()) {
+            Log::error('Replicate API Error', ['status' => $response->status(), 'body' => $response->body()]);
+            return response()->json(['error' => 'Replicate Provider error: ' . $response->body()], $response->status());
+        }
+
+        $data = $response->json();
+        $requestId = $data['id'];
+
+        Log::info("Replicate started. ID: {$requestId}");
+
+        // Возвращаем статус initiated для всего (async)
+        // Frontend будет поллить и images, и videos.
+        return response()->json([
+            'status' => 'initiated',
+            'requestId' => $requestId,
+            'type' => $isVideo ? 'videos' : 'images', 
+            'message' => 'Generation started via Replicate.'
+        ]);
+    }
+
+    private function checkReplicateStatus($token, $requestId)
+    {
+        $response = Http::withToken($token)->get(self::REPLICATE_API_BASE . "/predictions/{$requestId}");
+        
+        if (!$response->successful()) {
+            return response()->json(['error' => 'Replicate status check failed'], 500);
+        }
+
+        $data = $response->json();
+        $status = $data['status']; // starting, processing, succeeded, failed, canceled
+
+        if ($status === 'succeeded') {
+            $output = $data['output']; 
+            // Output бывает array или string
+            $resultUrl = is_array($output) ? $output[0] : $output;
+            
+            Log::info("Replicate completed: $resultUrl");
+
+            // Сохраняем локально, так как ссылки Replicate временные? (обычно 1 час - сутки)
+            // Лучше сохранить.
+             try {
+                $ext = str_contains($resultUrl, '.mp4') ? 'mp4' : 'jpg';
+                $savedUrl = $this->saveUrlToStorage($resultUrl, $ext);
+                $resultUrl = $savedUrl;
+             } catch (\Exception $e) {
+                Log::warning("Failed to save Replicate output locally, using remote URL", ['error' => $e->getMessage()]);
+             }
+
+            return response()->json([
+                'status' => 'completed',
+                'result_url' => $resultUrl,
+                'choices' => [[
+                    'message' => [
+                        'content' => null,
+                        'images' => [['image_url' => ['url' => $resultUrl]]]
+                    ]
+                ]]
+            ]);
+        } elseif ($status === 'failed' || $status === 'canceled') {
+            return response()->json(['status' => 'failed', 'error' => $data['error'] ?? 'Generation failed'], 500);
+        }
+
+        return response()->json(['status' => 'processing']);
+    }
+
+    /**
+     * Сохраняет файл по URL (утилита)
+     */
+    private function saveUrlToStorage($url, $extension)
+    {
+        $response = Http::timeout(60)->get($url);
+        if (!$response->successful()) throw new \Exception("Download failed");
+        
+        $filename = 'rep_' . Str::random(12) . '.' . $extension;
+        $path = 'generations/' . $filename;
+        Storage::disk('public')->put($path, $response->body());
+        return url('storage/' . $path);
+    }
+
+    /**
+     * Парсит сообщения (вспомогательный метод без изменений логики)
      */
     private function parseOpenRouterMessage($messages)
     {
@@ -169,12 +233,8 @@ class GenerationController extends Controller
                     if (!$url) continue;
                     
                     if (str_starts_with($url, 'data:')) {
-                        // Извлекаем base64 и mime type
-                        if (preg_match('/^data:(image\/[a-z]+);base64,(.+)$/', $url, $matches)) {
-                            $imagesBase64[] = [
-                                'mime_type' => $matches[1],
-                                'data' => $matches[2]
-                            ];
+                         if (preg_match('/^data:(image\/[a-z]+);base64,(.+)$/', $url, $matches)) {
+                            $imagesBase64[] = ['mime_type' => $matches[1], 'data' => $matches[2]];
                         }
                     } else {
                         $imageUrls[] = $url;
@@ -191,282 +251,5 @@ class GenerationController extends Controller
             'imagesBase64' => $imagesBase64,
             'prompt' => trim($promptText)
         ];
-    }
-
-    /**
-     * Генерация изображения через Gemini (синхронно).
-     */
-    private function generateImageSync($apiKey, $input)
-    {
-        $contents = [];
-        $parts = [];
-
-        // Добавляем все изображения
-        foreach ($input['imagesBase64'] as $img) {
-            $parts[] = [
-                'inline_data' => [
-                    'mime_type' => $img['mime_type'],
-                    'data' => $img['data']
-                ]
-            ];
-        }
-
-        // Конвертируем URL в base64
-        foreach ($input['imageUrls'] as $url) {
-            try {
-                $imageData = $this->fetchImageAsBase64($url);
-                if ($imageData) {
-                    $parts[] = [
-                        'inline_data' => [
-                            'mime_type' => $imageData['mime_type'],
-                            'data' => $imageData['data']
-                        ]
-                    ];
-                }
-            } catch (\Exception $e) {
-                Log::warning("Failed to fetch image from URL: {$url}", ['error' => $e->getMessage()]);
-            }
-        }
-
-        // Добавляем промпт
-        $parts[] = ['text' => $input['prompt']];
-
-        $contents[] = ['role' => 'user', 'parts' => $parts];
-
-        $payload = [
-            'contents' => $contents,
-            'generationConfig' => [
-                'responseModalities' => ['TEXT', 'IMAGE'],
-                'imageConfig' => [
-                    'aspectRatio' => '3:4',
-                    'imageSize' => '2K'
-                ]
-            ],
-            'safetySettings' => [
-                ['category' => 'HARM_CATEGORY_HARASSMENT', 'threshold' => 'BLOCK_NONE'],
-                ['category' => 'HARM_CATEGORY_HATE_SPEECH', 'threshold' => 'BLOCK_NONE'],
-                ['category' => 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'threshold' => 'BLOCK_NONE'],
-                ['category' => 'HARM_CATEGORY_DANGEROUS_CONTENT', 'threshold' => 'BLOCK_NONE'],
-            ]
-        ];
-
-        Log::info('Sending Image Request to Gemini:', [
-            'model' => 'gemini-3-pro-image-preview',
-            'parts_count' => count($parts),
-            'prompt_preview' => substr($input['prompt'], 0, 100)
-        ]);
-
-        $response = Http::timeout(120)
-            ->post(self::GEMINI_API_BASE . '/models/gemini-3-pro-image-preview:generateContent?key=' . $apiKey, $payload);
-
-        if (!$response->successful()) {
-            Log::error('Gemini API Error', ['status' => $response->status(), 'body' => $response->body()]);
-            return response()->json(['error' => 'Provider error: ' . $response->body()], $response->status());
-        }
-
-        $data = $response->json();
-        
-        // Ищем изображение в ответе
-        $candidates = $data['candidates'] ?? [];
-        if (empty($candidates)) {
-            Log::error('No candidates in Gemini response');
-            return response()->json(['error' => 'No image generated'], 500);
-        }
-
-        $responseParts = $candidates[0]['content']['parts'] ?? [];
-        $generatedImageData = null;
-        $responseText = null;
-
-        foreach ($responseParts as $part) {
-            if (isset($part['inlineData'])) {
-                $generatedImageData = $part['inlineData'];
-            } elseif (isset($part['inline_data'])) {
-                $generatedImageData = $part['inline_data'];
-            } elseif (isset($part['text'])) {
-                $responseText = $part['text'];
-            }
-        }
-
-        if (!$generatedImageData) {
-            Log::error('No image in Gemini response', ['parts' => $responseParts]);
-            return response()->json([
-                'error' => 'No image generated. Model response: ' . ($responseText ?? 'empty'),
-                'text' => $responseText
-            ], 500);
-        }
-
-        // Сохраняем изображение
-        $resultUrl = $this->saveBase64Image($generatedImageData);
-        
-        Log::info("Image generation completed. URL: {$resultUrl}");
-
-        // Возвращаем сразу completed (синхронная генерация)
-        return response()->json([
-            'status' => 'completed',
-            'result_url' => $resultUrl,
-            'choices' => [[
-                'message' => [
-                    'content' => $responseText,
-                    'images' => [['image_url' => ['url' => $resultUrl]]]
-                ]
-            ]]
-        ]);
-    }
-
-    /**
-     * Инициация генерации видео через Veo 3.0.
-     * Veo API использует формат instances/parameters для predictLongRunning
-     */
-    private function initiateVideo($apiKey, $input)
-    {
-        // Формируем instance для Veo predictLongRunning
-        $instance = [
-            'prompt' => $input['prompt']
-        ];
-
-        // Добавляем стартовое изображение если есть
-        if (!empty($input['imagesBase64'])) {
-            $img = $input['imagesBase64'][0];
-            $instance['image'] = [
-                'bytesBase64Encoded' => $img['data']
-            ];
-        } elseif (!empty($input['imageUrls'])) {
-            try {
-                $imageData = $this->fetchImageAsBase64($input['imageUrls'][0]);
-                if ($imageData) {
-                    $instance['image'] = [
-                        'bytesBase64Encoded' => $imageData['data']
-                    ];
-                }
-            } catch (\Exception $e) {
-                Log::warning("Failed to fetch start image for video", ['error' => $e->getMessage()]);
-            }
-        }
-
-        $payload = [
-            'instances' => [$instance],
-            'parameters' => [
-                'aspectRatio' => '9:16',
-                'sampleCount' => 1
-            ]
-        ];
-
-        Log::info('Sending Video Request to Gemini Veo:', [
-            'model' => 'veo-3.0-generate',
-            'has_image' => isset($instance['image']),
-            'prompt_preview' => substr($input['prompt'], 0, 100)
-        ]);
-
-        $response = Http::timeout(120)
-            ->post(self::GEMINI_API_BASE . '/models/veo-3.0-generate:predictLongRunning?key=' . $apiKey, $payload);
-
-        if (!$response->successful()) {
-            Log::error('Gemini Veo API Error', ['status' => $response->status(), 'body' => $response->body()]);
-            return response()->json(['error' => 'Provider error: ' . $response->body()], $response->status());
-        }
-
-        $data = $response->json();
-        $operationName = $data['name'] ?? null;
-
-        if (!$operationName) {
-            Log::error('No operation name in Veo response', ['data' => $data]);
-            return response()->json(['error' => 'Failed to start video generation'], 500);
-        }
-
-        // Encode operation name for URL safety
-        $requestId = base64_encode($operationName);
-        
-        Log::info("Video generation initiated. Operation: {$operationName}");
-
-        return response()->json([
-            'status' => 'initiated',
-            'requestId' => $requestId,
-            'type' => 'videos',
-            'message' => 'Video generation started. Poll /api/generate/status/{requestId}?type=videos for updates.'
-        ]);
-    }
-
-    /**
-     * Скачивает изображение по URL и возвращает base64.
-     */
-    private function fetchImageAsBase64($url)
-    {
-        $response = Http::timeout(30)->get($url);
-        
-        if (!$response->successful()) {
-            throw new \Exception("Failed to fetch image: HTTP " . $response->status());
-        }
-
-        $contentType = $response->header('Content-Type') ?? 'image/jpeg';
-        // Normalize mime type
-        if (str_contains($contentType, ';')) {
-            $contentType = trim(explode(';', $contentType)[0]);
-        }
-
-        return [
-            'mime_type' => $contentType,
-            'data' => base64_encode($response->body())
-        ];
-    }
-
-    /**
-     * Сохраняет base64 изображение в storage и возвращает URL.
-     */
-    private function saveBase64Image($imageData)
-    {
-        $mimeType = $imageData['mimeType'] ?? $imageData['mime_type'] ?? 'image/png';
-        $data = $imageData['data'] ?? '';
-        
-        $extension = match($mimeType) {
-            'image/jpeg' => 'jpg',
-            'image/png' => 'png',
-            'image/webp' => 'webp',
-            'image/gif' => 'gif',
-            default => 'png'
-        };
-
-        $filename = 'gen_' . Str::random(16) . '_' . time() . '.' . $extension;
-        $path = 'generations/' . $filename;
-
-        Storage::disk('public')->put($path, base64_decode($data));
-
-        return url('storage/' . $path);
-    }
-
-    /**
-     * Скачивает видео через Gemini Files API и сохраняет локально.
-     */
-    private function downloadAndSaveVideo($apiKey, $videoFile)
-    {
-        // videoFile содержит информацию о файле, включая URI
-        $fileUri = $videoFile['uri'] ?? null;
-        $fileName = $videoFile['name'] ?? null;
-
-        if (!$fileUri && !$fileName) {
-            throw new \Exception('No video URI or name in response');
-        }
-
-        // Скачиваем через Files API
-        $downloadUrl = $fileUri ?? (self::GEMINI_API_BASE . "/files/{$fileName}:download?key={$apiKey}");
-        
-        // Если это Gemini file reference, скачиваем через API
-        if ($fileName && !$fileUri) {
-            $response = Http::timeout(120)
-                ->get(self::GEMINI_API_BASE . "/files/{$fileName}?key={$apiKey}&alt=media");
-        } else {
-            // Прямая ссылка
-            $response = Http::timeout(120)->get($downloadUrl);
-        }
-
-        if (!$response->successful()) {
-            throw new \Exception('Failed to download video: HTTP ' . $response->status());
-        }
-
-        $filename = 'vid_' . Str::random(16) . '_' . time() . '.mp4';
-        $path = 'generations/' . $filename;
-
-        Storage::disk('public')->put($path, $response->body());
-
-        return url('storage/' . $path);
     }
 }
