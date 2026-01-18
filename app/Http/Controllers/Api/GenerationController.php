@@ -36,7 +36,7 @@ class GenerationController extends Controller
         $input = $this->parseOpenRouterMessage($request->messages);
         
         $requestedModel = $request->model;
-        $isVideo = str_contains(strtolower($requestedModel ?? ''), 'veo');
+        $isVideo = str_contains(strtolower($requestedModel ?? ''), 'veo') || str_contains(strtolower($requestedModel ?? ''), 'kling');
         
         try {
             // Если есть токен Replicate - используем его (приоритет для видео Veo и Nano Banana)
