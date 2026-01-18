@@ -43,7 +43,10 @@ class GenerationController extends Controller
             // Мы перешли полностью на Replicate
             $replicateModel = $isVideo ? 'kwaivgi/kling-v2.5-turbo-pro' : 'google/nano-banana';
             
-            return $this->initiateReplicateGeneration($apiKey, $replicateModel, $input, $isVideo);
+        // Use Replicate token if available, otherwise fallback to generic API key
+        $token = $replicateToken ?: $apiKey;
+            
+        return $this->initiateReplicateGeneration($token, $replicateModel, $input, $isVideo);
 
         } catch (\Exception $e) {
             Log::error('Generation Exception', [
@@ -62,11 +65,14 @@ class GenerationController extends Controller
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
 
-        if (!$apiKey) {
+        $replicateToken = env('REPLICATE_API_TOKEN');
+        $token = $replicateToken ?: $apiKey;
+
+        if (!$token) {
             return response()->json(['error' => 'API Token not configured'], 500);
         }
 
-        return $this->checkReplicateStatus($apiKey, $requestId);
+        return $this->checkReplicateStatus($token, $requestId);
     }
 
     /**
