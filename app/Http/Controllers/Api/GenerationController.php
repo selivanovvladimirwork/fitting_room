@@ -314,45 +314,28 @@ class GenerationController extends Controller
     }
 
     /**
-     * Инициация генерации видео через Veo 3.1.
-     * Документация: https://ai.google.dev/gemini-api/docs/veo
+     * Инициация генерации видео через Veo 3.0.
+     * Veo API использует формат instances/parameters для predictLongRunning
      */
     private function initiateVideo($apiKey, $input)
     {
-        // Базовый payload для Veo generateVideos
-        $payload = [
-            'generationConfig' => [
-                'videoDuration' => '5s',
-                'aspectRatio' => '9:16',  // Вертикальное видео
-                'numberOfVideos' => 1
-            ]
-        ];
-
-        // Добавляем input с промптом
-        $contents = [
-            'parts' => [
-                ['text' => $input['prompt']]
-            ]
+        // Формируем instance для Veo predictLongRunning
+        $instance = [
+            'prompt' => $input['prompt']
         ];
 
         // Добавляем стартовое изображение если есть
         if (!empty($input['imagesBase64'])) {
             $img = $input['imagesBase64'][0];
-            $contents['parts'][] = [
-                'inlineData' => [
-                    'mimeType' => $img['mime_type'],
-                    'data' => $img['data']
-                ]
+            $instance['image'] = [
+                'bytesBase64Encoded' => $img['data']
             ];
         } elseif (!empty($input['imageUrls'])) {
             try {
                 $imageData = $this->fetchImageAsBase64($input['imageUrls'][0]);
                 if ($imageData) {
-                    $contents['parts'][] = [
-                        'inlineData' => [
-                            'mimeType' => $imageData['mime_type'],
-                            'data' => $imageData['data']
-                        ]
+                    $instance['image'] = [
+                        'bytesBase64Encoded' => $imageData['data']
                     ];
                 }
             } catch (\Exception $e) {
@@ -360,15 +343,21 @@ class GenerationController extends Controller
             }
         }
 
-        $payload['contents'] = [$contents];
+        $payload = [
+            'instances' => [$instance],
+            'parameters' => [
+                'aspectRatio' => '9:16',
+                'sampleCount' => 1
+            ]
+        ];
 
         Log::info('Sending Video Request to Gemini Veo:', [
             'model' => 'veo-3.0-generate',
-            'has_image' => count($contents['parts']) > 1,
+            'has_image' => isset($instance['image']),
             'prompt_preview' => substr($input['prompt'], 0, 100)
         ]);
 
-        $response = Http::timeout(60)
+        $response = Http::timeout(120)
             ->post(self::GEMINI_API_BASE . '/models/veo-3.0-generate:predictLongRunning?key=' . $apiKey, $payload);
 
         if (!$response->successful()) {
