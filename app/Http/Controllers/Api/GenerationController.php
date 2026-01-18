@@ -75,69 +75,64 @@ class GenerationController extends Controller
     private function initiateReplicateGeneration($token, $model, $input, $isVideo)
     {
         // Подготовка входных параметров для Replicate
-        // Подготовка параметров для Replicate
-        $params = [
-            'prompt' => $input['prompt'],
-            'output_format' => $isVideo ? 'mp4' : 'jpg'
-        ];
-        
-        if ($isVideo) {
-             $params['video_duration'] = '5s'; 
-             $params['aspect_ratio'] = '9:16';
+        // Если это фото, используем IDM-VTON (лучшая модель для примерки на Replicate)
+        // Модель: cuuupid/idm-vton
+        if (!$isVideo) {
+             $model = 'cuuupid/idm-vton'; // Или конкретная версия, если нужно
+             
+             // Ищем фото человека и одежды
+             // Обычно фронтенд шлет: [avatar, avatar, avatar, ..., clothes]
+             // Берем ПЕРВОЕ фото как человека, и ПОСЛЕДНЕЕ как одежду.
+             
+             $humanImg = null;
+             $garmImg = null;
+             
+             $allImages = $input['imageUrls'];
+             if (!empty($input['imagesBase64'])) {
+                foreach($input['imagesBase64'] as $img) {
+                    $allImages[] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
+                }
+             }
+
+             if (count($allImages) >= 2) {
+                 $humanImg = $allImages[0];
+                 $garmImg = end($allImages);
+             } elseif (count($allImages) == 1) {
+                 // Если только 1 картинка, это странно для примерки, но пусть будет human
+                 $humanImg = $allImages[0];
+             }
+
+             if (!$humanImg || !$garmImg) {
+                 Log::warning("Not enough images for IDM-VTON. Needed human and garment.");
+                 // Fallback или ошибка? Попробуем отправить что есть, но модель скорее всего упадет или выдаст ерунду.
+             }
+
+             $params = [
+                 'human_img' => $humanImg,
+                 'garm_img' => $garmImg,
+                 'garment_des' => $input['prompt'], // Используем промпт как описание одежды
+                 'category' => 'upper_body', // Можно попробовать определить из промпта, но upper_body - безопасный дефолт
+                 'steps' => 30, // Качество
+                 'seed' => 42
+             ];
+             
+             // Для Veo (видео) оставляем старую логику
         } else {
-             $params['aspect_ratio'] = '3:4';
-             $params['safety_filter_level'] = 'block_only_high_harmability';
-        }
-        
-        // Обработка изображений для мультимодального ввода
-        // 1. Собираем все ссылки
-        $allImages = $input['imageUrls'];
-        if (!empty($input['imagesBase64'])) {
-            // Replicate лучше работает с URL или dataURI
-            foreach($input['imagesBase64'] as $img) {
-                $allImages[] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
-            }
-        }
-
-        if (!empty($allImages)) {
-            // Стратегия 1: Для известных мультимодальных моделей пробуем передать массив
-            // Но большинство API принимают только 'image'.
-            // Берем ПЕРВУЮ картинку как основную (image)
-            $params['image'] = $allImages[0];
-            
-            // Стратегия 2: Если картинок > 1, пытаемся передать их как additional_images или в промпт
-            if (count($allImages) > 1) {
-                 // Добавляем ссылки в промпт (Gemini часто умеет читать ссылки из текста)
-                 // или если это кастомная модель.
-                 // Для Nano-banana (Gemini) это может не сработать, если она не ходит в интернет.
-                 // Но попробовать стоит.
-            }
-            
-            // EXPERIMENTAL: Для Replicate Gemini часто используется параметр 'images' (array) вместо 'image' (string)
-            // Но если мы используем image-to-video (Veo), там строго 'image'.
-            if (!$isVideo) {
-                // Для фото пробуем передать ВСЕ картинки если параметр поддерживается (игнорируется если нет)
-                // $params['input_images'] = $allImages; 
-            }
+            // ... (Veo logic preserved) ...
+            $params = [
+                'prompt' => $input['prompt'],
+                'video_duration' => '5s',
+                'aspect_ratio' => '9:16',
+                // Veo принимает только 1 картинку (старт видео)
+                'image' => !empty($input['imageUrls']) ? $input['imageUrls'][0] : null 
+            ];
+             if (!empty($input['imagesBase64'])) {
+                 $img = $input['imagesBase64'][0];
+                 $params['image'] = 'data:' . $img['mime_type'] . ';base64,' . $img['data'];
+             }
         }
 
-        // ВАЖНО: Если это задача примерки (Virtual Try-On), то нам нужны ВСЕ картинки.
-        // Так как мы не знаем точную спецификацию "google/nano-banana", 
-        // мы добавим описание к промпту, что есть несколько изображений.
-        // И попытаемся передать вторую картинку (одежду) как 'mask' или 'condition_image' на удачу? Нет.
-        
-        // Давайте просто добавим ссылки в промпт, это самый безопасный способ для LLM Vision
-        $imageLinksText = "\n\nReferenced Images:\n";
-        foreach ($allImages as $idx => $url) {
-            if (str_starts_with($url, 'data:')) continue; // Data URI слишком длинные для промпта
-            $imageLinksText .= "Image " . ($idx + 1) . ": " . $url . "\n";
-        }
-        
-        if (count($allImages) > 0) {
-            $params['prompt'] .= $imageLinksText;
-        }
-
-        Log::info("Sending Replicate Prediction ($model)", ['params' => array_keys($params)]);
+        Log::info("Sending Replicate Prediction ($model)", ['params_keys' => array_keys($params)]);
 
         $response = Http::withToken($token)
             ->post(self::REPLICATE_API_BASE . "/models/{$model}/predictions", [
