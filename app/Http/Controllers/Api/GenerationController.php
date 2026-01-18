@@ -315,31 +315,44 @@ class GenerationController extends Controller
 
     /**
      * Инициация генерации видео через Veo 3.1.
+     * Документация: https://ai.google.dev/gemini-api/docs/veo
      */
     private function initiateVideo($apiKey, $input)
     {
+        // Базовый payload для Veo generateVideos
         $payload = [
-            'prompt' => $input['prompt'],
-            'config' => [
+            'generationConfig' => [
+                'videoDuration' => '5s',
                 'aspectRatio' => '9:16',  // Вертикальное видео
-                'resolution' => '720p'
+                'numberOfVideos' => 1
+            ]
+        ];
+
+        // Добавляем input с промптом
+        $contents = [
+            'parts' => [
+                ['text' => $input['prompt']]
             ]
         ];
 
         // Добавляем стартовое изображение если есть
         if (!empty($input['imagesBase64'])) {
             $img = $input['imagesBase64'][0];
-            $payload['image'] = [
-                'imageBytes' => $img['data'],
-                'mimeType' => $img['mime_type']
+            $contents['parts'][] = [
+                'inlineData' => [
+                    'mimeType' => $img['mime_type'],
+                    'data' => $img['data']
+                ]
             ];
         } elseif (!empty($input['imageUrls'])) {
             try {
                 $imageData = $this->fetchImageAsBase64($input['imageUrls'][0]);
                 if ($imageData) {
-                    $payload['image'] = [
-                        'imageBytes' => $imageData['data'],
-                        'mimeType' => $imageData['mime_type']
+                    $contents['parts'][] = [
+                        'inlineData' => [
+                            'mimeType' => $imageData['mime_type'],
+                            'data' => $imageData['data']
+                        ]
                     ];
                 }
             } catch (\Exception $e) {
@@ -347,14 +360,16 @@ class GenerationController extends Controller
             }
         }
 
+        $payload['contents'] = [$contents];
+
         Log::info('Sending Video Request to Gemini Veo:', [
-            'model' => 'veo-3.1-generate-preview',
-            'has_image' => isset($payload['image']),
+            'model' => 'veo-3.0-generate',
+            'has_image' => count($contents['parts']) > 1,
             'prompt_preview' => substr($input['prompt'], 0, 100)
         ]);
 
         $response = Http::timeout(60)
-            ->post(self::GEMINI_API_BASE . '/models/veo-3.1-generate-preview:generateVideos?key=' . $apiKey, $payload);
+            ->post(self::GEMINI_API_BASE . '/models/veo-3.0-generate:generateVideos?key=' . $apiKey, $payload);
 
         if (!$response->successful()) {
             Log::error('Gemini Veo API Error', ['status' => $response->status(), 'body' => $response->body()]);
