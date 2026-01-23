@@ -39,16 +39,9 @@ class GenerationController extends Controller
         $isVideo = str_contains(strtolower($requestedModel ?? ''), 'veo') || str_contains(strtolower($requestedModel ?? ''), 'kling');
         
         try {
-            // Determine the model to use
-            // Priority: Frontend request > Default
-            $replicateModel = $requestedModel; // Use what frontend requested
-            
-            // If frontend didn't specify or sent an unknown model, default appropriately
-            if (!$replicateModel || $replicateModel === 'default') {
-                 $replicateModel = $isVideo ? 'kwaivgi/kling-v2.5-turbo-pro' : 'cuuupid/idm-vton';
-            }
-            
-            Log::info("Using Replicate Model: $replicateModel (requested: $requestedModel)");
+            // Если есть токен Replicate - используем его (приоритет для видео Veo и Nano Banana)
+            // Мы перешли полностью на Replicate
+            $replicateModel = $isVideo ? 'kwaivgi/kling-v2.5-turbo-pro' : 'google/nano-banana';
             
             // User requested to use ONLY the admin key (API Key from settings)
             $token = $apiKey;
@@ -92,54 +85,23 @@ class GenerationController extends Controller
 
         if ($model === 'cuuupid/idm-vton') {
             // == IDM-VTON SPECIFIC LOGIC ==
-            
-            // DETAILED LOGGING
-            Log::info("=== IDM-VTON DEBUG START ===");
-            Log::info("All Images Count: " . count($input['allImages'] ?? []));
-            
-            foreach ($input['allImages'] ?? [] as $idx => $img) {
-                $imgType = str_starts_with($img, 'data:') ? 'BASE64' : 'URL';
-                $imgLen = strlen($img);
-                $imgPreview = substr($img, 0, 100);
-                Log::info("Image[$idx]: Type=$imgType, Length=$imgLen, Preview=$imgPreview...");
-            }
-            
             $vtonInput = $this->parseVtonInput($input);
             
-            Log::info("Parsed VTON Input", [
-                'human_img_length' => strlen($vtonInput['human_img'] ?? ''),
-                'garm_img_length' => strlen($vtonInput['garm_img'] ?? ''),
-                'human_preview' => substr($vtonInput['human_img'] ?? '', 0, 100),
-                'garm_preview' => substr($vtonInput['garm_img'] ?? '', 0, 100),
-                'category' => $vtonInput['category'],
-            ]);
-            
             if (!$vtonInput['human_img'] || !$vtonInput['garm_img']) {
-                Log::error("VTON Missing Images", [
-                    'has_human' => !empty($vtonInput['human_img']),
-                    'has_garm' => !empty($vtonInput['garm_img']),
-                ]);
                 throw new \Exception("IDM-VTON requires both Human and Garment images.");
             }
-            
-            // CRITICAL: Convert base64 to URL if needed (Replicate may not handle large base64)
-            $humanImg = $this->ensureImageUrl($vtonInput['human_img']);
-            $garmImg = $this->ensureImageUrl($vtonInput['garm_img']);
-            
-            Log::info("After ensureImageUrl", [
-                'human_img' => $humanImg,
-                'garm_img' => $garmImg,
-            ]);
 
             // Auto-generate caption if not provided
             $garmentDes = $vtonInput['garment_des'];
             if (empty($garmentDes)) {
-                 $garmentDes = $this->getGarmentDescription($token, $garmImg);
+                 $garmentDes = $this->getGarmentDescription($token, $vtonInput['garm_img']);
             }
             
             // Refine category based on Vision Caption (since user Title might be generic "Clothing Item")
             $category = $vtonInput['category'] ?? 'upper_body';
             
+            // Only refine if the initial detection was generic or default, OR always refine?
+            // Vision is likely more accurate for uploads.
             $desLower = strtolower($garmentDes);
             
             if (Str::contains($desLower, ['dress', 'gown', 'frock', 'maxi', 'midi', 'mini'])) {
@@ -151,8 +113,8 @@ class GenerationController extends Controller
             }
 
             $params = [
-                'human_img' => $humanImg,
-                'garm_img' => $garmImg,
+                'human_img' => $this->ensureImageIsUrl($vtonInput['human_img']),
+                'garm_img' => $this->ensureImageIsUrl($vtonInput['garm_img']),
                 'garment_des' => $garmentDes,
                 'category' => $category,
                 'crop' => false, 
@@ -160,8 +122,7 @@ class GenerationController extends Controller
                 'steps' => 30, 
             ];
             
-            Log::info("=== IDM-VTON FINAL PARAMS ===", $params);
-            Log::info("=== IDM-VTON DEBUG END ===");
+            Log::info("IDM-VTON Params Prepared", ['category' => $params['category'], 'caption' => $garmentDes]);
 
         } elseif ($isVideo) {
             // Kling AI v2.5 Turbo Pro
@@ -391,77 +352,44 @@ class GenerationController extends Controller
     }
     
     /**
-     * Ensures the image is a publicly accessible URL.
-     * If it's a base64 data URI, saves it as a temporary file and returns the URL.
+     * Convert Base64 Data URI to a public URL by saving to storage.
+     * If already a URL, return as-is.
      */
-    private function ensureImageUrl($imageData)
+    private function ensureImageIsUrl($imageData)
     {
-        // If base64 data URI - save to temp file
-        if (str_starts_with($imageData, 'data:')) {
-            try {
-                if (preg_match('/^data:(image\/[a-z]+);base64,(.+)$/', $imageData, $matches)) {
-                    $mimeType = $matches[1];
-                    $base64Data = $matches[2];
-                    
-                    $extension = 'jpg';
-                    if (str_contains($mimeType, 'png')) $extension = 'png';
-                    elseif (str_contains($mimeType, 'webp')) $extension = 'webp';
-                    elseif (str_contains($mimeType, 'gif')) $extension = 'gif';
-                    
-                    $decoded = base64_decode($base64Data);
-                    if (!$decoded) {
-                         Log::warning("Failed to decode base64 image");
-                         return $imageData;
-                    }
-                    
-                    $filename = 'tmp_' . Str::random(16) . '.' . $extension;
-                    $path = 'temp_uploads/' . $filename;
-                    Storage::disk('public')->put($path, $decoded);
-                    
-                    $publicUrl = url('storage/' . $path);
-                    Log::info("Converted base64 to URL: " . $publicUrl);
-                    return $publicUrl;
-                }
-            } catch (\Exception $e) {
-                Log::error("Base64 conversion failed: " . $e->getMessage());
-            }
+        if (!$imageData) return null;
+        
+        // Already a URL
+        if (!str_starts_with($imageData, 'data:')) {
             return $imageData;
         }
-        
-        // If external URL - download and re-host locally (fixes CORS/access issues for Replicate)
-        // Only re-host if it's from our admin domain or contains /public/ path issue
-        if (str_contains($imageData, 'adminfittingroom') || str_contains($imageData, '/public/storage/')) {
-            try {
-                Log::info("Re-hosting external URL: " . $imageData);
-                
-                // Fix common /public/storage/ path issue
-                $fixedUrl = str_replace('/public/storage/', '/storage/', $imageData);
-                
-                $response = Http::timeout(30)->get($fixedUrl);
-                
-                if ($response->successful()) {
-                    $contentType = $response->header('Content-Type') ?? 'image/jpeg';
-                    $extension = 'jpg';
-                    if (str_contains($contentType, 'png')) $extension = 'png';
-                    elseif (str_contains($contentType, 'webp')) $extension = 'webp';
-                    
-                    $filename = 'rehost_' . Str::random(16) . '.' . $extension;
-                    $path = 'temp_uploads/' . $filename;
-                    Storage::disk('public')->put($path, $response->body());
-                    
-                    $publicUrl = url('storage/' . $path);
-                    Log::info("Re-hosted to: " . $publicUrl);
-                    return $publicUrl;
-                } else {
-                    Log::warning("Failed to download URL: " . $fixedUrl . " Status: " . $response->status());
-                }
-            } catch (\Exception $e) {
-                Log::error("URL re-hosting failed: " . $e->getMessage());
-            }
+
+        // Parse Data URI
+        if (!preg_match('/^data:(image\/([a-z]+));base64,(.+)$/', $imageData, $matches)) {
+            Log::warning("Invalid data URI format");
+            return $imageData; // Return as-is, let Replicate handle
         }
+
+        $mimeType = $matches[1]; // e.g., image/jpeg
+        $extension = $matches[2]; // e.g., jpeg
+        $base64Data = $matches[3];
         
-        // Return original URL for other cases
-        return $imageData;
+        // Decode and save
+        $binary = base64_decode($base64Data);
+        if (!$binary) {
+            Log::warning("Failed to decode base64 image");
+            return $imageData;
+        }
+
+        $filename = 'upload_' . Str::random(16) . '.' . $extension;
+        $path = 'temp_uploads/' . $filename;
+        
+        Storage::disk('public')->put($path, $binary);
+        $publicUrl = url('storage/' . $path);
+        
+        Log::info("Converted Base64 to URL", ['url' => $publicUrl]);
+        
+        return $publicUrl;
     }
 
     /**
