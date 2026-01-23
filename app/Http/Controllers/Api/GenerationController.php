@@ -320,9 +320,16 @@ class GenerationController extends Controller
                 Log::warning("Failed to save Replicate output locally, using remote URL", ['error' => $e->getMessage()]);
              }
 
+            // Validate the result (only for images, not videos)
+            $isValid = true;
+            if (!str_contains($resultUrl, '.mp4')) {
+                $isValid = $this->validateGenerationResult($token, $resultUrl);
+            }
+
             return response()->json([
                 'status' => 'completed',
                 'result_url' => $resultUrl,
+                'is_valid' => $isValid, // Frontend will handle retry if false
                 'choices' => [[
                     'message' => [
                         'content' => null,
@@ -335,6 +342,68 @@ class GenerationController extends Controller
         }
 
         return response()->json(['status' => 'processing']);
+    }
+    
+    /**
+     * Validate generation result using Vision model (BLIP-2 VQA)
+     * Checks if the image shows a person wearing clothing (not just garment or just person)
+     */
+    private function validateGenerationResult($token, $imageUrl)
+    {
+        try {
+            Log::info("Validating generation result: " . substr($imageUrl, 0, 50));
+            
+            // Use BLIP-2 VQA (Visual Question Answering)
+            $response = Http::withToken($token)
+                ->post(self::REPLICATE_API_BASE . "/models/salesforce/blip-2/predictions", [
+                    'input' => [
+                        'image' => $imageUrl,
+                        'question' => 'Does this image show a person wearing clothing? Answer yes or no.'
+                    ]
+                ]);
+                
+            if (!$response->successful()) {
+                Log::warning("Validation request failed", ['body' => $response->body()]);
+                return true; // Assume valid on error to not block
+            }
+            
+            $data = $response->json();
+            $predId = $data['id'];
+            
+            // Poll for result (BLIP is fast ~1-2s)
+            $attempts = 0;
+            while ($attempts < 10) {
+                sleep(1);
+                $attempts++;
+                
+                $check = Http::withToken($token)->get(self::REPLICATE_API_BASE . "/predictions/{$predId}");
+                $statusData = $check->json();
+                
+                if ($statusData['status'] === 'succeeded') {
+                    $answer = strtolower($statusData['output'] ?? '');
+                    Log::info("Validation answer: " . $answer);
+                    
+                    // Check if the answer indicates valid result
+                    $isValid = Str::contains($answer, 'yes');
+                    
+                    if (!$isValid) {
+                        Log::warning("Generation validation FAILED - result does not show person wearing clothing");
+                    }
+                    
+                    return $isValid;
+                }
+                
+                if (in_array($statusData['status'], ['failed', 'canceled'])) {
+                    break;
+                }
+            }
+            
+            return true; // Assume valid on timeout
+            
+        } catch (\Exception $e) {
+            Log::error("Validation Error: " . $e->getMessage());
+            return true; // Assume valid on error
+        }
     }
 
     /**
