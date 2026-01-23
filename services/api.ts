@@ -6,7 +6,7 @@
 // Автоопределение: локалка или продакшен
 const API_BASE = window.location.hostname === 'fittingroom.loc'
     ? 'https://fittingadmin.loc/api'
-    : 'https://adminfittingroom.fixers.su/public/api';
+    : 'https://adminfittingroom.fixers.su/api';
 
 // Получить токен из localStorage
 const getToken = (): string | null => {
@@ -208,12 +208,70 @@ export const catalogApi = {
 // ==================== Generation API ====================
 export const generationApi = {
     async generateImage(data: { model: string; messages: any[] }) {
-        const response = await fetch(`${API_BASE}/generate`, {
+        // 1. Инициируем генерацию
+        const initResponse = await fetch(`${API_BASE}/generate`, {
             method: 'POST',
             headers: getHeaders(true),
             body: JSON.stringify(data),
         });
-        return handleResponse<any>(response);
+
+        const initResult = await handleResponse<{
+            status: string;
+            requestId?: string;
+            type?: string;
+            result_url?: string;
+            choices?: any[];
+            error?: string;
+        }>(initResponse);
+
+        if (initResult.error) {
+            throw new Error(initResult.error);
+        }
+
+        // Если генерация уже завершена (синхронный режим для изображений)
+        if (initResult.status === 'completed') {
+            console.log('[Generation] Completed immediately!', initResult.result_url);
+            return initResult;
+        }
+
+        const { requestId, type } = initResult;
+        console.log(`[Generation] Initiated. RequestId: ${requestId}, Type: ${type}`);
+
+        // 2. Polling статуса (Veo может занимать до 6+ минут)
+        const maxAttempts = 120; // 120 * 5 сек = 600 сек (10 минут)
+        const pollInterval = 5000; // 5 сек
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+            console.log(`[Generation] Polling attempt ${attempt + 1}/${maxAttempts}...`);
+
+            const statusResponse = await fetch(
+                `${API_BASE}/generate/status/${requestId}?type=${type}`,
+                { headers: getHeaders() }
+            );
+
+            const statusResult = await handleResponse<{
+                status: string;
+                result_url?: string;
+                choices?: any[];
+                error?: string;
+            }>(statusResponse);
+
+            if (statusResult.status === 'completed') {
+                console.log('[Generation] Completed!', statusResult.result_url);
+                // Возвращаем в старом формате для совместимости с остальным кодом
+                return statusResult;
+            }
+
+            if (statusResult.status === 'failed') {
+                throw new Error(statusResult.error || 'Generation failed');
+            }
+
+            // Иначе продолжаем polling (status === 'processing')
+        }
+
+        throw new Error('Generation timeout');
     },
 };
 
@@ -282,6 +340,69 @@ export const shopsApi = {
             headers: getHeaders(true),
         });
         return handleResponse<{ success: boolean }>(response);
+    },
+};
+
+// ==================== Favorite External Shops API (from search) ====================
+export const favoriteExternalShopsApi = {
+    async getAll() {
+        const response = await fetch(`${API_BASE}/favorite-external-shops`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ id: number; domain: string; url: string; addedAt: string }[]>(response);
+    },
+
+    async add(domain: string, url?: string) {
+        const response = await fetch(`${API_BASE}/favorite-external-shops`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify({ domain, url }),
+        });
+        return handleResponse<{ id: number; domain: string; url: string; addedAt: string }>(response);
+    },
+
+    async remove(domain: string) {
+        const response = await fetch(`${API_BASE}/favorite-external-shops/${encodeURIComponent(domain)}`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string }>(response);
+    },
+
+    async check(domains: string[]) {
+        const response = await fetch(`${API_BASE}/favorite-external-shops/check`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify({ domains }),
+        });
+        return handleResponse<{ favorites: string[] }>(response);
+    },
+};
+
+// ==================== Saved Looks API (Гардероб - сохранённые генерации) ====================
+export const savedLooksApi = {
+    async getAll() {
+        const response = await fetch(`${API_BASE}/saved-looks`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<any[]>(response);
+    },
+
+    async add(data: { image_url: string; title?: string; brand?: string; store_url?: string }) {
+        const response = await fetch(`${API_BASE}/saved-looks`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify(data),
+        });
+        return handleResponse<any>(response);
+    },
+
+    async remove(id: string) {
+        const response = await fetch(`${API_BASE}/saved-looks/${id}`, {
+            method: 'DELETE',
+            headers: getHeaders(true),
+        });
+        return handleResponse<{ message: string }>(response);
     },
 };
 

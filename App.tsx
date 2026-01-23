@@ -11,6 +11,7 @@ import SettingsView from './views/SettingsView';
 import SubscriptionView from './views/SubscriptionView';
 import PostDetailView from './views/PostDetailView';
 import UserProfileView from './views/UserProfileView';
+import NotFoundView from './views/NotFoundView';
 
 import AuthModal from './components/AuthModal';
 import Notification from './components/Notification';
@@ -43,7 +44,7 @@ const parseRoute = (): { view: View; postId?: string; username?: string } => {
     '/avatar-settings': View.AVATAR_SETTINGS,
   };
 
-  return { view: routes[path] || View.FEED };
+  return { view: routes[path] || View.NOT_FOUND };
 };
 
 const App: React.FC = () => {
@@ -60,6 +61,7 @@ const App: React.FC = () => {
 
   // Manage multiple avatars - теперь с поддержкой API
   const [avatars, setAvatars] = useState<DigitalTwin[]>([]);
+  const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [avatarsLoaded, setAvatarsLoaded] = useState(false);
 
   const [activeAvatarId, setActiveAvatarId] = useState<string | null>(() => {
@@ -98,21 +100,29 @@ const App: React.FC = () => {
   }, [activeAvatarId]);
 
   const handleAddAvatar = async (avatar: DigitalTwin) => {
-    setAvatars(prev => [...prev, avatar]);
-    if (!activeAvatarId) setActiveAvatarId(avatar.id);
-
-    // Сохраняем в API если авторизован и есть хотя бы одно изображение
-    const validImages = avatar.referenceImages.filter(img => img && img.trim() !== '');
-    if (isAuthenticated && validImages.length > 0) {
+    // Для авторизованных: сначала создаём на сервере, получаем реальный ID
+    if (isAuthenticated) {
+      const validImages = avatar.referenceImages.filter(img => img && img.trim() !== '');
       try {
-        await avatarsApi.create({
+        const serverAvatar = await avatarsApi.create({
           name: avatar.name,
-          referenceImages: validImages,
+          referenceImages: validImages,  // Может быть пустой массив - это OK
           stats: avatar.stats
         });
+        // Используем ID от сервера
+        const avatarWithServerId = { ...avatar, id: String(serverAvatar.id) };
+        setAvatars(prev => [...prev, avatarWithServerId]);
+        if (!activeAvatarId) setActiveAvatarId(String(serverAvatar.id));
       } catch (error) {
         console.error('Failed to save avatar to API:', error);
+        // Fallback: добавляем локально с временным ID
+        setAvatars(prev => [...prev, avatar]);
+        if (!activeAvatarId) setActiveAvatarId(avatar.id);
       }
+    } else {
+      // Для неавторизованных: добавляем локально
+      setAvatars(prev => [...prev, avatar]);
+      if (!activeAvatarId) setActiveAvatarId(avatar.id);
     }
   };
 
@@ -237,24 +247,46 @@ const App: React.FC = () => {
 
   const handleFitAction = async (post: Post) => {
     requireAuth(async () => {
+      // Save product info to localStorage for later use in fitting room
+      const productInfo = {
+        title: post.title,
+        storeUrl: (post as any).storeUrl,
+        author: post.author
+      };
+
+      // Store product info by imageUrl as key
+      try {
+        const existingInfo = JSON.parse(localStorage.getItem('wardrobe_product_info') || '{}');
+        existingInfo[post.imageUrl] = productInfo;
+        localStorage.setItem('wardrobe_product_info', JSON.stringify(existingInfo));
+      } catch (e) {
+        console.error('Failed to save product info to localStorage:', e);
+      }
+
       // 1. Add to API wardrobe if authenticated
       if (isAuthenticated) {
         try {
           await wardrobeApi.add({
             image_url: post.imageUrl,
-            title: post.author,
+            title: post.title || post.author?.replace('@', '') || 'Товар',
+            brand: post.author?.replace('@', ''),
+            store_url: (post as any).storeUrl
           });
         } catch (error) {
           console.error('Failed to add to API wardrobe:', error);
         }
       }
 
-      setFittingPost(post);
+      // Don't auto-select for generation - just add to wardrobe slider
+      // User will select from slider when they want to generate
 
-      // 2. Show notification
+      // Update key to force refresh of HomeView wardrobe list
+      setHomeRefreshKey(prev => prev + 1);
+
+      // 2. Show notification with link to fitting room
       setNotification({
-        message: 'Предмет добавлен в гардероб',
-        actionLabel: 'В Примерочную',
+        message: 'Предмет добавлен в примерочную',
+        actionLabel: 'Перейти',
         onAction: () => setCurrentView(View.HOME)
       });
     });
@@ -284,6 +316,7 @@ const App: React.FC = () => {
     switch (currentView) {
       case View.HOME: return (
         <HomeView
+          key={currentView === View.HOME ? `home-${homeRefreshKey}` : 'home'}
           onStart={() => requireAuth(() => setCurrentView(View.AVATAR))}
           onSelectPost={handleSelectPost}
           onFitPost={handleFitAction}
@@ -294,6 +327,7 @@ const App: React.FC = () => {
           onSetActiveAvatar={setActiveAvatarId}
           initialFittingPost={fittingPost}
           onSavePost={handleSavePost}
+          onNavigateToFeed={() => setCurrentView(View.FEED)}
         />
       );
       case View.AVATAR: return (
@@ -371,12 +405,14 @@ const App: React.FC = () => {
             onFit={handleFitAction}
           />
         );
-      default: return <FeedView onSelectPost={handleSelectPost} onFitPost={handleFitAction} onNavigateToProfile={handleNavigateToProfile} />;
+      case View.NOT_FOUND:
+        return <NotFoundView onBack={() => { setCurrentView(View.FEED); window.history.pushState({}, '', '/'); }} />;
+      default: return <NotFoundView onBack={() => { setCurrentView(View.FEED); window.history.pushState({}, '', '/'); }} />;
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white overflow-x-hidden selection:bg-black selection:text-white">
+    <div className="min-h-screen flex flex-col bg-white selection:bg-black selection:text-white">
       <AuthModal />
       <Navigation currentView={currentView} setView={setCurrentView} />
       <main className="flex-grow pt-24 pb-12 px-1 md:px-4 w-full">

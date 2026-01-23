@@ -12,7 +12,8 @@ export enum View {
   WARDROBE = 'wardrobe',
   SHOP = 'shop',
   SHOP_DETAIL = 'shop_detail',
-  AVATAR_SETTINGS = 'avatar_settings'
+  AVATAR_SETTINGS = 'avatar_settings',
+  NOT_FOUND = 'not_found'
 }
 
 export interface UserStats {
@@ -28,6 +29,7 @@ export interface DigitalTwin {
   name: string;
   referenceImages: string[];
   stats: UserStats;
+  generatedAvatarUrl?: string; // Generated avatar icon
 }
 
 export interface Product {
@@ -94,8 +96,5 @@ export interface PostGroup {
 }
 
 export enum Scenario {
-  WALKING = 'Walking',
-  CAR_ENTRY = 'Car Entry',
-  SPORT = 'Sport',
-  STREET_INTERACTION = 'Street Deco'
+  WALKING = 'Walking'
 }

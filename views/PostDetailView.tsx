@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Post } from '../types';
 import PostCard from '../components/PostCard';
-import { profileApi } from '../services/api';
+import { profileApi, favoriteExternalShopsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 interface PostDetailViewProps {
@@ -21,6 +21,24 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes || 0);
+
+  // Check if this is an external product from search (author starts with @ and looks like a domain)
+  const isExternalProduct = useMemo(() => {
+    const author = post.author || '';
+    // External products have author like "@domain.com" or "@subdomain.domain.com"
+    return author.startsWith('@') && author.includes('.') && !author.includes(' ');
+  }, [post.author]);
+
+  // Extract domain from author for external products
+  const displayAuthor = useMemo(() => {
+    if (isExternalProduct) {
+      return post.author?.replace('@', '') || '';
+    }
+    return post.author?.startsWith('@') ? post.author : `@${post.author}`;
+  }, [post.author, isExternalProduct]);
+
+  // Get store URL for external products
+  const externalStoreUrl = (post as any).storeUrl || '';
 
   const touchStart = useRef<number | null>(null);
   const touchEnd = useRef<number | null>(null);
@@ -60,9 +78,23 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
 
   const handleFollow = () => {
     requireAuth(async () => {
-      // Note: We need author's user ID, not username. For now, just toggle UI.
-      // Backend would need to resolve username to ID or accept username.
-      setIsFollowing(!isFollowing);
+      if (isExternalProduct) {
+        // For external products, add/remove shop from favorites
+        const domain = post.author?.replace('@', '') || '';
+        try {
+          if (isFollowing) {
+            await favoriteExternalShopsApi.remove(domain);
+          } else {
+            await favoriteExternalShopsApi.add(domain, externalStoreUrl);
+          }
+          setIsFollowing(!isFollowing);
+        } catch (error) {
+          console.error('Favorite shop error:', error);
+        }
+      } else {
+        // For regular posts, toggle follow (existing behavior)
+        setIsFollowing(!isFollowing);
+      }
     });
   };
 
@@ -156,10 +188,10 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
             </svg>
           </button>
           <button
-            onClick={() => onNavigateToProfile(post.author)}
+            onClick={() => isExternalProduct ? window.open(externalStoreUrl, '_blank') : onNavigateToProfile(post.author)}
             className="text-3xl md:text-5xl font-thin tracking-widest flex-grow text-left hover:opacity-60"
           >
-            {post.author?.startsWith('@') ? post.author : `@${post.author}`}
+            {displayAuthor}
           </button>
         </div>
         <button
@@ -167,7 +199,9 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
           className={`w-full md:w-auto px-10 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all duration-300 shadow-xl active:scale-95 ${isFollowing ? 'bg-gray-100 text-gray-400 border border-transparent' : 'bg-black text-white border border-white/20 hover:bg-gray-900'
             }`}
         >
-          {isFollowing ? 'Подписки' : 'Подписаться'}
+          {isExternalProduct
+            ? (isFollowing ? 'В избранном' : 'В избранное')
+            : (isFollowing ? 'Подписки' : 'Подписаться')}
         </button>
       </div>
 
@@ -308,7 +342,7 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
                   rel="noopener noreferrer"
                   className="w-full py-3 bg-white text-black border border-gray-200 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-100 active:scale-95 transition-all duration-300 text-center block"
                 >
-                  В МАГАЗИН
+                  К ТОВАРУ
                 </a>
               )}
             </div>
@@ -319,9 +353,9 @@ const PostDetailView: React.FC<PostDetailViewProps> = ({ post, onBack, onNavigat
       {/* Similar Items - Adjusted gap for mobile */}
       <div className="mt-24 md:mt-40">
         <h2 className="text-3xl md:text-5xl font-thin tracking-widest uppercase mb-10 md:mb-16 px-1">Похожие образы</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0 space-y-2 md:space-y-4">
           {similarPosts.map((p) => (
-            <div key={p.id}>
+            <div key={p.id} className="break-inside-avoid mb-2 md:mb-4">
               <PostCard
                 post={p}
                 onClick={(post) => onSelectPost(post, similarPosts)}

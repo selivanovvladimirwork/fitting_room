@@ -441,9 +441,9 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+              <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 space-y-2 md:space-y-4">
                 {postGroups.find(g => g.id === activeGroup)?.posts.map((post, i) => (
-                  <div key={post.id} className="relative group/item">
+                  <div key={post.id} className="relative group/item break-inside-avoid mb-2 md:mb-4">
                     <PostCard
                       post={post}
                       onClick={(p) => onSelectPost(p, postGroups.find(g => g.id === activeGroup)?.posts || [])}
@@ -523,7 +523,7 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
                     <p className="text-sm">Ваши публикации появятся здесь</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
+                  <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0 space-y-2 md:space-y-4">
                     {myPosts.map((post) => (
                       <div
                         key={post.id}
@@ -534,7 +534,7 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
                         onDrop={(e) => { e.preventDefault(); handleDrop(post); }}
                         onDragEnter={() => draggedPost && setDropTargetId(post.id)}
                         onDragLeave={() => setDropTargetId(null)}
-                        className={`relative transition-all cursor-grab active:cursor-grabbing ${draggedPost?.id === post.id ? 'opacity-50 scale-95' : ''} ${dropTargetId === post.id ? 'ring-4 ring-black ring-offset-2 rounded-xl' : ''}`}
+                        className={`relative transition-all cursor-grab active:cursor-grabbing break-inside-avoid mb-2 md:mb-4 ${draggedPost?.id === post.id ? 'opacity-50 scale-95' : ''} ${dropTargetId === post.id ? 'ring-4 ring-black ring-offset-2 rounded-xl' : ''}`}
                       >
                         <PostCard
                           post={post}
@@ -604,9 +604,9 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
                     <p className="text-sm">Сохраняйте понравившиеся образы</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
+                  <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0 space-y-2 md:space-y-4">
                     {savedPosts.map((post) => (
-                      <div key={post.id}>
+                      <div key={post.id} className="break-inside-avoid mb-2 md:mb-4">
                         <PostCard
                           post={post}
                           onClick={(p) => onSelectPost(p, savedPosts)}
@@ -634,9 +634,9 @@ const AvatarView: React.FC<AvatarViewProps> = ({ onNavigateSubscription, onNavig
                     <p className="text-sm">Лайкайте образы, чтобы они появились здесь</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4 px-1 md:px-0">
+                  <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4 px-1 md:px-0 space-y-2 md:space-y-4">
                     {likedPosts.map((post) => (
-                      <div key={post.id}>
+                      <div key={post.id} className="break-inside-avoid mb-2 md:mb-4">
                         <PostCard
                           post={post}
                           onClick={(p) => onSelectPost(p, likedPosts)}

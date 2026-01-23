@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Scenario, Post, DigitalTwin } from '../types';
 import PostCard from '../components/PostCard';
-import { generationApi, wardrobeApi, postsApi } from '../services/api';
+import { generationApi, wardrobeApi, postsApi, savedLooksApi } from '../services/api';
 import Notification from '../components/Notification';
 import ProductInfoModal from '../components/ProductInfoModal';
 
 interface VirtualFitViewProps {
   initialPost?: Post | null;
+  selectedItems?: Post[]; // Multi-select: array of items to combine
   userReferences?: string[]; // База фотографий пользователя
   embedded?: boolean;
   onNavigateToProfile?: (username: string) => void;
@@ -170,12 +171,15 @@ const UploadZone = ({
   );
 };
 
-const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userReferences = [], embedded = false, onNavigateToProfile, avatars, activeAvatarId, onSetActiveAvatar, onSavePost }) => {
+const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedItems = [], userReferences = [], embedded = false, onNavigateToProfile, avatars, activeAvatarId, onSetActiveAvatar, onSavePost }) => {
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [isBaseGenerated, setIsBaseGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [initialResultUrl, setInitialResultUrl] = useState<string | null>(null); // To store the base photo for video generation
   const [activeCloth, setActiveCloth] = useState<Post | null>(null);
+  // Multi-select: use selectedItems if provided, otherwise fallback to single activeCloth
+  const [selectedClothes, setSelectedClothes] = useState<Post[]>([]);
   const [showKeyHint, setShowKeyHint] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mediaMode, setMediaMode] = useState<'photo' | 'video'>('photo');
@@ -190,7 +194,18 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
   });
   const [notification, setNotification] = useState<{ message: string } | null>(null);
   const [modalAction, setModalAction] = useState<'wardrobe' | 'publish' | null>(null);
+  const [historyLightbox, setHistoryLightbox] = useState<{ id: string, imageUrl: string, timestamp: number, clothTitle?: string } | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
+
+  const [animationPrompt, setAnimationPrompt] = useState('');
+  const [animationSource, setAnimationSource] = useState<'preset' | 'prompt'>('preset');
+  const promptSuggestions = [
+    'показ мод',
+    'проходка модели',
+    'разворот на подиуме',
+    'фэшн съемка',
+    'дефиле'
+  ];
 
   // Save history to localStorage when it changes (limit to 10 items to avoid quota)
   useEffect(() => {
@@ -206,9 +221,35 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
 
   useEffect(() => {
     if (initialPost) {
-      setActiveCloth(initialPost);
+      // Enrich with product info from localStorage
+      let enrichedPost = { ...initialPost };
+      try {
+        const productInfoStorage = JSON.parse(localStorage.getItem('wardrobe_product_info') || '{}');
+        const productInfo = productInfoStorage[initialPost.imageUrl];
+        if (productInfo) {
+          enrichedPost = {
+            ...initialPost,
+            title: productInfo.title || initialPost.title,
+            storeUrl: productInfo.storeUrl || (initialPost as any).storeUrl,
+          } as Post;
+        }
+      } catch (e) {
+        console.error('Failed to read product info from localStorage:', e);
+      }
+      setActiveCloth(enrichedPost);
+      // Also set to selectedClothes for backward compatibility
+      setSelectedClothes([enrichedPost]);
     }
   }, [initialPost]);
+
+  // Sync selectedItems prop to internal state
+  useEffect(() => {
+    if (selectedItems && selectedItems.length > 0) {
+      setSelectedClothes(selectedItems);
+      // Set first item as activeCloth for preview
+      setActiveCloth(selectedItems[0]);
+    }
+  }, [selectedItems]);
 
   useEffect(() => {
     if (activeCloth && !embedded) {
@@ -239,10 +280,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
   }, [initialPost]); // Reload when fitting item changes
 
   const scenarios = [
-    { id: Scenario.WALKING, label: 'Подиум / Ходьба' },
-    { id: Scenario.CAR_ENTRY, label: 'Посадка в авто' },
-    { id: Scenario.SPORT, label: 'Спортивное движение' },
-    { id: Scenario.STREET_INTERACTION, label: 'Уличный декор' }
+    { id: Scenario.WALKING, label: 'Подиум / Дефиле с разворотом' }
   ];
 
   const handleSelectKey = async () => {
@@ -252,17 +290,75 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     setErrorMessage(null);
   };
 
+  // Compress and convert image to base64 with reduced size
+  const compressImage = async (url: string, maxWidth = 1024, quality = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 8000);
+
+      img.onload = () => {
+        clearTimeout(timeout);
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // Try to get data - this will throw if canvas is tainted
+          try {
+            const webp = canvas.toDataURL('image/webp', quality);
+            if (webp.startsWith('data:image/webp') && webp.length > 100) {
+              resolve(webp.split(',')[1]);
+            } else {
+              resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
+            }
+          } catch {
+            reject(new Error('Canvas tainted'));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('Load failed'));
+      };
+
+      img.src = url;
+    });
+  };
+
   const fetchImageAsBase64 = async (url: string): Promise<string> => {
     try {
-      if (url.startsWith('data:')) return url.split(',')[1];
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.readAsDataURL(blob);
-      });
-    } catch (e) { return ""; }
+      // Data URIs - always compress (no CORS)
+      if (url.startsWith('data:')) {
+        return await compressImage(url, 1024, 0.7);
+      }
+      // External URLs - try compress, fallback to URL
+      try {
+        const result = await compressImage(url, 1024, 0.7);
+        if (result && result.length > 100) return result;
+      } catch (e) {
+        console.warn('CORS blocked, using URL:', url.substring(0, 50));
+      }
+      // Return marker for direct URL usage
+      return `URL:${url}`;
+    } catch (e) {
+      console.error('Image failed:', e);
+      return `URL:${url}`;
+    }
   };
 
   const handleGenerate = async (e: React.MouseEvent, scenario: string) => {
@@ -271,16 +367,28 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
 
     if (!activeCloth) return;
 
+    // Для видео режима требуется сначала сгенерированное фото
+    if (mediaMode === 'video' && !resultUrl) {
+      setErrorMessage('Сначала сгенерируйте фото, затем нажмите "Анимировать"');
+      return;
+    }
+
     // @ts-ignore
     setSelectedScenario(scenario === 'STUDIO_DEFAULT' ? null : scenario);
     setIsGenerating(true);
-    setResultUrl(null);
+    // Для видео не сбрасываем resultUrl — он нужен как startImage, но берем мы его теперь из initialResultUrl или resultUrl
+    if (mediaMode !== 'video') {
+      setResultUrl(null);
+      setInitialResultUrl(null);
+    }
     setErrorMessage(null);
 
-    // Default studio prompt for base generation
-    const scenarioPrompt = scenario === 'STUDIO_DEFAULT'
-      ? "Neutral Studio Background, Professional Lighting, Front View, White Infinity Cove"
-      : scenario;
+    // Default studio prompt for base generation (Urban Fashion style)
+    let scenarioPrompt = scenario;
+
+    if (scenario === 'STUDIO_DEFAULT') {
+      scenarioPrompt = "Full body shot of a person standing in a bright, minimalist high-end fitting room. The background consists of clean, solid neutral walls with soft architectural lines, no mirrors, no windows, and no text. Bright diffused overhead lighting, clean and airy atmosphere. Professional fashion photography, raw photo, highly detailed fabric and skin texture, 8k resolution, ultra-realistic. Sharp focus on the entire outfit, f/8 aperture, no blur, no bokeh, no plastic skin.";
+    }
 
     try {
       const messagesContent: any[] = [];
@@ -291,6 +399,68 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         console.warn("[DEBUG] NO USER REFERENCES! The model will use the clothing model's face.");
       }
 
+      // === СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ВИДЕО (VEO) ===
+      if (mediaMode === 'video') {
+        const sourceImage = initialResultUrl || resultUrl;
+
+        if (sourceImage) {
+          console.log('[DEBUG] Video mode: using sourceImage as startImage:', sourceImage);
+
+          // Динамический промт в зависимости от сценария
+          let refinedPrompt = animationPrompt.trim();
+
+          if (!refinedPrompt) {
+            if (scenario === Scenario.WALKING) {
+              refinedPrompt = "Full body shot, professional fashion walk towards the camera. The model walks with a steady, natural gait. At the front, the model performs a smooth, controlled half-turn to the side to showcase the outfit's profile, pauses for a split second, then elegantly executes a seamless 90-degree pivot. Natural weight distribution, fluid movement, neutral posture. Bright minimalist fitting room background, solid light-colored walls, no mirrors, no text. Soft even lighting, 4k, photorealistic, high frame rate.";
+            } else {
+              // Универсальный вариант для презентации на месте
+              refinedPrompt = "Full body shot, fashion lookbook style. A model stands in a neutral, confident pose, then executes a slow, natural 360-degree turn to show the outfit. Realistic weight distribution, smooth foot movement, arms moving naturally by the sides. Brightly lit professional studio, glossy white floor, high-end fashion cinematography, 4k, highly detailed.";
+            }
+          }
+          // Если пользователь ввел свой промт - используем его КАК ЕСТЬ (без добавок), чтобы он мог управлять генерацией полностью.
+
+          // Для видео просто отправляем сгенерированное фото и промт
+          messagesContent.push({
+            type: "text",
+            text: refinedPrompt
+          });
+          messagesContent.push({
+            type: "image_url",
+            image_url: { url: sourceImage }
+          });
+
+          const messages = [{ role: "user", content: messagesContent }];
+          console.log("[DEBUG] Video Messages:", messagesContent.map(m => m.type));
+
+          const data = await generationApi.generateImage({
+            model: 'kwaivgi/kling-v2.5-turbo-pro',
+            messages: messages
+          });
+
+          console.log("Video Backend Response Data:", data);
+          const videoUrl = data.result_url || data.choices?.[0]?.message?.video_url;
+          if (videoUrl) {
+            setResultUrl(videoUrl);
+            setIsBaseGenerated(true);
+            setGenerationHistory(prev => [{
+              id: `gen-video-${Date.now()}`,
+              imageUrl: videoUrl,
+              timestamp: Date.now(),
+              clothTitle: activeCloth?.title || 'Видео'
+            }, ...prev].slice(0, 50));
+          } else {
+            throw new Error("No video URL in response");
+          }
+          setIsGenerating(false);
+          return; // Выход из функции — видео сгенерировано
+        } else {
+          setErrorMessage('Сначала сгенерируйте фото, затем нажмите "Анимировать"');
+          setIsGenerating(false);
+          return;
+        }
+      }
+
+      // === ОБЫЧНАЯ ЛОГИКА ДЛЯ ФОТО (NANO-BANANA) ===
       // 1. Context & Person Label
       messagesContent.push({
         type: "text",
@@ -299,12 +469,15 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
 
       // 2. Add Target Image(s) based on Mode
       if (generationMode === 'image' && customTargetImage) {
-        const base64Data = await fetchImageAsBase64(customTargetImage);
-        if (base64Data) {
-          console.log(`[DEBUG] Adding Custom Target Image. Length: ${base64Data.length}`);
+        const imgData = await fetchImageAsBase64(customTargetImage);
+        if (imgData) {
+          console.log(`[DEBUG] Adding Custom Target Image. Length: ${imgData.length}`);
+          const imageUrl = imgData.startsWith('URL:')
+            ? imgData.slice(4) // Direct URL
+            : `data:image/webp;base64,${imgData}`; // Base64
           messagesContent.push({
             type: "image_url",
-            image_url: { url: `data:image/jpeg;base64,${base64Data}` }
+            image_url: { url: imageUrl }
           });
         }
       } else if (userReferences && userReferences.length > 0) {
@@ -312,12 +485,15 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         await Promise.all(userReferences.slice(0, 3).map(async (ref, index) => {
           try {
             // Force fetch image as base64 to handle both URL and Data URI
-            const base64Data = await fetchImageAsBase64(ref);
-            if (base64Data) {
-              console.log(`[DEBUG] Processed Avatar ${index + 1}. Length: ${base64Data.length}`);
+            const imgData = await fetchImageAsBase64(ref);
+            if (imgData) {
+              console.log(`[DEBUG] Processed Avatar ${index + 1}. Length: ${imgData.length}`);
+              const imageUrl = imgData.startsWith('URL:')
+                ? imgData.slice(4)
+                : `data:image/webp;base64,${imgData}`;
               messagesContent.push({
                 type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${base64Data}` }
+                image_url: { url: imageUrl }
               });
             } else {
               console.warn(`[DEBUG] Failed to process avatar ${index + 1}: empty result`);
@@ -328,44 +504,111 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         }));
       }
 
-      // 3. Clothing Label
-      messagesContent.push({
-        type: "text",
-        text: "GARMENT REFERENCE (Clothing Source ONLY). IGNORE the person in this photo. ONLY look at the clothing:"
-      });
+      // 3. Clothing Labels and Images (Multi-select support)
+      const clothesToUse = selectedClothes.length > 0 ? selectedClothes : (activeCloth ? [activeCloth] : []);
 
-      // 4. Add Cloth Image
-      const clothBase64 = await fetchImageAsBase64(activeCloth.imageUrl);
-      console.log(`[DEBUG] Adding Cloth Image. Length: ${clothBase64.length}`);
-      messagesContent.push({
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${clothBase64}` }
-      });
+      if (clothesToUse.length === 1) {
+        // Single garment - original prompt
+        messagesContent.push({
+          type: "text",
+          text: "GARMENT REFERENCE (Clothing Source ONLY). IGNORE the person in this photo. ONLY look at the clothing:"
+        });
 
-      // 5. Final Instruction (Prompt)
-      messagesContent.push({
-        type: "text",
-        text: `TASK: Virtual Try-On / Fashion Editorial.
-        
-        INSTRUCTION: Create a photorealistic image of the TARGET MODEL (from the first set of photos) WEARING the GARMENT (from the last photo).
-        
-        SCENARIO: ${scenarioPrompt}.
-        
-        CRITICAL IDENTITY RULES:
-        1. **FACE**: Must match the TARGET MODEL (first photos) exactly.
-        2. **BODY**: Must match the TARGET MODEL's body type.
-        3. **CLOTHING**: Must be the GARMENT from the reference.
-        4. **IGNORE**: Do not use the face/hair of the person in the garment reference photo.
-        
-        OUTPUT ONLY THE IMAGE.`
-      });
+        const clothData = await fetchImageAsBase64(clothesToUse[0].imageUrl);
+        console.log(`[DEBUG] Adding Cloth Image. Length: ${clothData.length}`);
+        const clothUrl = clothData.startsWith('URL:')
+          ? clothData.slice(4)
+          : `data:image/webp;base64,${clothData}`;
+        messagesContent.push({
+          type: "image_url",
+          image_url: { url: clothUrl }
+        });
+
+        // Single garment instruction
+        messagesContent.push({
+          type: "text",
+          text: `INSTRUCTION: Create a high-fidelity, photorealistic image of the TARGET MODEL wearing the GARMENT. 
+
+CLOTHING FIDELITY ANALYSIS:
+1. TEXTURE: Conduct a detailed study of the garment's material. Preserve the exact weave, sheen, and fabric weight (e.g., the stiffness of denim, the drape of silk, or the grain of leather).
+2. CONSTRUCTION: Maintain all structural elements: precise collar shape, buttons, stitching patterns, zippers, and hemline finish. 
+3. FIT & DRAPE: The garment must wrap around the TARGET MODEL's body realistically, creating natural folds and shadows based on their specific physique.
+4. ACCURACY: Every logo, print, or unique texture detail from the garment reference must be translated with 8k precision.
+
+CRITICAL IDENTITY RULES:
+1. FACE: Must match the TARGET MODEL exactly. No morphing.
+2. BODY: Maintain the TARGET MODEL's proportions and skin tone.
+3. IGNORE: Completely disregard the identity, hair, and background of the person in the garment reference photo.
+
+ENVIRONMENT: 
+Set the scene in a brightly lit, minimalist professional studio/fitting room. Sharp focus, f/8 aperture, deep depth of field, high-end editorial quality.
+
+OUTPUT ONLY THE IMAGE.`
+        });
+      } else {
+        // Multiple garments - combine into one outfit
+        messagesContent.push({
+          type: "text",
+          text: `MULTIPLE GARMENTS TO COMBINE (${clothesToUse.length} items). IGNORE persons in these photos. ONLY look at the clothing items:`
+        });
+
+        // Add each garment with label
+        for (let i = 0; i < clothesToUse.length; i++) {
+          const item = clothesToUse[i];
+          messagesContent.push({
+            type: "text",
+            text: `GARMENT ${i + 1}${item.title ? ` (${item.title})` : ''}:`
+          });
+
+          const clothData = await fetchImageAsBase64(item.imageUrl);
+          console.log(`[DEBUG] Adding Cloth ${i + 1}. Length: ${clothData.length}`);
+          const clothUrl = clothData.startsWith('URL:')
+            ? clothData.slice(4)
+            : `data:image/webp;base64,${clothData}`;
+          messagesContent.push({
+            type: "image_url",
+            image_url: { url: clothUrl }
+          });
+        }
+
+        // Multi-garment instruction
+        messagesContent.push({
+          type: "text",
+          text: `INSTRUCTION: Create a high-fidelity, photorealistic image of the TARGET MODEL wearing ALL ${clothesToUse.length} provided GARMENTS combined into ONE cohesive outfit.
+
+CLOTHING FIDELITY ANALYSIS:
+1. TEXTURE & HARMONY: Conduct a detailed study of each garment's material. Preserve the exact weave, sheen, and fabric weight. Ensure materials interact realistically (e.g., shirt tucked into pants, jacket over layers).
+2. CONSTRUCTION: Maintain all structural elements of every item: precise collars, buttons, stitching patterns, zippers, and finishes.
+3. FIT & DRAPE: All garments must wrap around the TARGET MODEL's body realistically, creating natural folds, layering effects, and shadows based on their specific physique.
+4. ACCURACY: Every logo, print, or unique texture detail from the garment references must be translated with 8k precision.
+
+CRITICAL IDENTITY RULES:
+1. FACE: Must match the TARGET MODEL exactly. No morphing.
+2. BODY: Maintain the TARGET MODEL's proportions and skin tone.
+3. IGNORE: Completely disregard the identities, hair, and backgrounds of the people in the garment reference photos.
+
+ENVIRONMENT: 
+Set the scene in a brightly lit, minimalist professional studio/fitting room. Sharp focus, f/8 aperture, deep depth of field, high-end editorial quality.
+
+OUTPUT ONLY THE IMAGE.`
+        });
+      }
 
       const messages = [{ role: "user", content: messagesContent }];
       console.log("[DEBUG] Final Messages Structure:", messagesContent.map(m => m.type));
 
+      // Выбор модели в зависимости от режима (фото/видео)
+      const selectedModel = mediaMode === 'video' ? 'kwaivgi/kling-v2.5-turbo-pro' : 'google/nano-banana';
+      console.log(`[DEBUG] Selected Model: ${selectedModel} (mediaMode: ${mediaMode})`);
+
+      // Log payload size for debugging
+      const payload = { model: selectedModel, messages: messages };
+      const payloadSize = JSON.stringify(payload).length;
+      console.log(`[DEBUG] Total Payload Size: ${(payloadSize / 1024 / 1024).toFixed(2)} MB`);
+
       // Call Backend API
       const data = await generationApi.generateImage({
-        model: "google/gemini-2.5-flash-image",
+        model: selectedModel,
         messages: messages
       });
 
@@ -380,6 +623,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         // Correct way to get image from OpenRouter/Gemini response
         const generatedUrl = message.images[0].image_url.url;
         setResultUrl(generatedUrl);
+        setInitialResultUrl(generatedUrl); // Save as base for video
         setIsBaseGenerated(true);
         // Save to history
         setGenerationHistory(prev => [{
@@ -396,6 +640,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
         const match = content.match(/\!\[.*?\]\((.*?)\)/);
         if (match && match[1]) {
           setResultUrl(match[1]);
+          setInitialResultUrl(match[1]);
           setIsBaseGenerated(true);
         } else {
           console.warn("Model returned text:", content);
@@ -464,14 +709,14 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
     if (!resultUrl) return;
 
     try {
-      const newItem = await wardrobeApi.add({
+      const newItem = await savedLooksApi.add({
         image_url: resultUrl,
         title: productInfo?.title || activeCloth?.title || 'Новый образ',
         brand: 'Virtual Fit',
         store_url: productInfo?.storeUrl
       });
 
-      // Update local state
+      // Update local state - wardrobePosts is now saved looks
       setWardrobePosts(prev => [newItem, ...prev]);
 
       if (onSavePost) {
@@ -511,6 +756,46 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
       handlePublish(data);
     }
     setModalAction(null);
+  };
+
+  // History item actions
+  const handleHistoryAddToWardrobe = async (item: { id: string, imageUrl: string, clothTitle?: string }) => {
+    try {
+      const newItem = await savedLooksApi.add({
+        image_url: item.imageUrl,
+        title: item.clothTitle || 'Образ из истории',
+        brand: 'Virtual Fit',
+      });
+      setWardrobePosts(prev => [newItem, ...prev]);
+      setNotification({ message: 'Добавлено в гардероб' });
+      setHistoryLightbox(null);
+    } catch (e) {
+      console.error('Failed to add to wardrobe:', e);
+      setNotification({ message: 'Ошибка: Необходима авторизация' });
+    }
+  };
+
+  const handleHistoryPublish = async (item: { id: string, imageUrl: string, clothTitle?: string }) => {
+    try {
+      await postsApi.create({
+        image_url: item.imageUrl,
+        title: item.clothTitle || 'Образ из истории',
+        tags: ['Published', 'Virtual Fit'],
+        is_private: false,
+      });
+      setNotification({ message: 'Опубликовано в ленте' });
+      setHistoryLightbox(null);
+    } catch (e) {
+      console.error('Failed to publish:', e);
+      setNotification({ message: 'Ошибка: Необходима авторизация' });
+    }
+  };
+
+  const handleHistoryUseAsResult = (item: { id: string, imageUrl: string }) => {
+    setResultUrl(item.imageUrl);
+    setInitialResultUrl(item.imageUrl); // Allow using history item as base for video
+    setIsBaseGenerated(true);
+    setHistoryLightbox(null);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -607,10 +892,25 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
             {/* Stable Image Container */}
             <div className="absolute inset-0 p-4 md:p-8 flex items-center justify-center">
               {(resultUrl || activeCloth || customTargetImage || isGenerating) && (
-                <img
-                  src={resultUrl || (generationMode === 'image' ? customTargetImage : activeCloth?.imageUrl) || "/mock/mock_avatar_full_001.jpg"}
-                  className={`w-full h-full object-contain transition-all duration-700 ${isGenerating ? 'blur-md scale-95 opacity-50' : 'scale-100 opacity-100'}`}
-                />
+                <>
+                  {/* Проверяем, является ли resultUrl видео */}
+                  {resultUrl && (resultUrl.endsWith('.mp4') || resultUrl.includes('/v/')) ? (
+                    <video
+                      src={resultUrl}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      controls
+                      className={`w-full h-full object-contain transition-all duration-700 ${isGenerating ? 'blur-md scale-95 opacity-50' : 'scale-100 opacity-100'}`}
+                    />
+                  ) : (
+                    <img
+                      src={resultUrl || (generationMode === 'image' ? customTargetImage : activeCloth?.imageUrl) || "/mock/mock_avatar_full_001.jpg"}
+                      className={`w-full h-full object-contain transition-all duration-700 ${isGenerating ? 'blur-md scale-95 opacity-50' : 'scale-100 opacity-100'}`}
+                    />
+                  )}
+                </>
               )}
             </div>
 
@@ -738,21 +1038,24 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
                 {generationMode === 'avatar' && avatars && avatars.length > 0 && (
                   <div className="mb-6 animate-in fade-in slide-in-from-right-2">
                     <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2">Модель</p>
-                    <div className="flex items-center gap-4 overflow-x-auto p-2 scrollbar-none snap-x">
+                    <div className="flex items-center gap-4 overflow-x-auto p-4 -m-2 scrollbar-none snap-x">
                       {avatars.map(av => (
                         <button
                           key={av.id}
                           onClick={() => onSetActiveAvatar && onSetActiveAvatar(av.id)}
-                          className={`w-12 h-12 rounded-full flex-shrink-0 border-2 transition-all snap-start ${activeAvatarId === av.id ? 'border-black scale-110 shadow-md ring-2 ring-white' : 'border-gray-100 grayscale opacity-70 hover:grayscale-0 hover:opacity-100'}`}
+                          className={`flex flex-col items-center gap-1 flex-shrink-0 transition-all snap-start ${activeAvatarId === av.id ? 'scale-110' : 'opacity-70 hover:opacity-100'}`}
                           title={av.name}
                         >
-                          {av.referenceImages[0] ? (
-                            <img src={av.referenceImages[0]} className="w-full h-full object-cover rounded-full" />
-                          ) : (
-                            <div className="w-full h-full bg-gray-100 flex items-center justify-center rounded-full">
-                              <span className="text-[8px] font-bold">{av.name[0]}</span>
-                            </div>
-                          )}
+                          <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${activeAvatarId === av.id ? 'border-black shadow-md ring-2 ring-white' : 'border-gray-100 grayscale hover:grayscale-0'}`}>
+                            {(av.generatedAvatarUrl || av.referenceImages[0]) ? (
+                              <img src={av.generatedAvatarUrl || av.referenceImages[0]} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                                <span className="text-[8px] font-bold">{av.name[0]}</span>
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[8px] font-bold uppercase tracking-wider text-gray-500 max-w-12 truncate">{av.name}</span>
                         </button>
                       ))}
                       <button
@@ -796,19 +1099,93 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
                 onChange={setMediaMode}
               />
 
-              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 px-2 animate-in fade-in">Сценарии</h3>
+
+
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 px-2 animate-in fade-in">
+                {mediaMode === 'photo' ? 'Сценарии' : 'Настройка анимации'}
+              </h3>
+
               <div className="flex flex-col gap-3 animate-in fade-in">
-                {scenarios.map(s => (
-                  <button
-                    key={s.id}
-                    disabled={!activeCloth || isGenerating}
-                    onClick={(e) => handleGenerate(e, s.id)}
-                    className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
-                      } disabled:opacity-20`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+                {mediaMode === 'photo' ? (
+                  /* Photo mode: preset scenarios */
+                  <>
+                    {scenarios.map(s => (
+                      <button
+                        key={s.id}
+                        disabled={!activeCloth || isGenerating}
+                        onClick={(e) => handleGenerate(e, s.id)}
+                        className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
+                          } disabled:opacity-20`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  /* Video mode: Hybrid UI */
+                  <>
+                    {/* Source Toggle */}
+                    <div className="flex p-1 bg-gray-100 rounded-full mb-2">
+                      <button
+                        onClick={() => setAnimationSource('preset')}
+                        className={`flex-1 py-2 rounded-full text-[9px] font-bold uppercase tracking-widest transition-all ${animationSource === 'preset' ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Шаблоны
+                      </button>
+                      <button
+                        onClick={() => setAnimationSource('prompt')}
+                        className={`flex-1 py-2 rounded-full text-[9px] font-bold uppercase tracking-widest transition-all ${animationSource === 'prompt' ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        Свой промт
+                      </button>
+                    </div>
+
+                    {animationSource === 'preset' ? (
+                      /* Presets List */
+                      scenarios.map(s => (
+                        <button
+                          key={s.id}
+                          disabled={!activeCloth || isGenerating}
+                          onClick={(e) => handleGenerate(e, s.id)}
+                          className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
+                            } disabled:opacity-20`}
+                        >
+                          {s.label}
+                        </button>
+                      ))
+                    ) : (
+                      /* Custom Prompt UI */
+                      <>
+                        <textarea
+                          value={animationPrompt}
+                          onChange={(e) => setAnimationPrompt(e.target.value)}
+                          placeholder="Опишите действие, например: идёт по подиуму и улыбается..."
+                          className="w-full h-24 bg-white border border-gray-200 rounded-2xl p-4 text-sm resize-none focus:outline-none focus:border-black transition-colors placeholder:text-gray-400"
+                        />
+                        {/* Prompt suggestions */}
+                        <div className="flex flex-wrap gap-2">
+                          {promptSuggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setAnimationPrompt(prev => prev ? `${prev}, ${suggestion}` : suggestion)}
+                              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-[10px] font-medium transition-colors"
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Generate button */}
+                        <button
+                          disabled={!activeCloth || isGenerating || !animationPrompt.trim()}
+                          onClick={(e) => handleGenerate(e, 'CUSTOM_ANIMATION')}
+                          className="w-full py-4 bg-black text-white rounded-full text-xs font-bold uppercase tracking-widest transition-all text-center flex items-center justify-center gap-2 disabled:opacity-30 hover:bg-zinc-800 mt-2"
+                        >
+                          {isGenerating ? 'Создаётся...' : '✨ Создать анимацию'}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
 
                 <button
                   onClick={() => setIsBaseGenerated(false)}
@@ -817,6 +1194,8 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
                   ← К выбору одежды
                 </button>
               </div>
+
+
 
               {resultUrl && (
                 <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-black/5 animate-in fade-in slide-in-from-bottom-2">
@@ -855,112 +1234,127 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
             </div>
           </div>
 
-          {/* Product Info Card in Sidebar */}
-          {activeCloth && (
-            <div className="liquid-glass p-5 rounded-[32px] border border-white mt-4 animate-in fade-in slide-in-from-top-2 duration-500">
-              <div className="flex items-start justify-between">
-                <div className="flex flex-col">
-                  <p className="text-[9px] font-black uppercase tracking-[0.1em] text-gray-400">{activeCloth.author}</p>
-                  <p className="text-[11px] font-bold uppercase text-black leading-tight mb-3">{activeCloth.title || 'Предмет одежды'}</p>
-                  <div className="flex gap-2">
-                    <button className="text-[8px] font-bold uppercase tracking-widest bg-black text-white hover:bg-zinc-800 px-4 py-2 rounded-full transition-all w-fit">
-                      К ТОВАРУ
-                    </button>
-                    <button
-                      onClick={() => { setActiveCloth(null); setResultUrl(null); setIsBaseGenerated(false); }}
-                      className="text-[8px] font-bold uppercase tracking-widest bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-black px-4 py-2 rounded-full transition-all w-fit"
-                    >
-                      УБРАТЬ
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div >
-
-      {/* Wardrobe */}
-      <div className="px-4 pb-20">
-        <div className="flex items-end justify-between mb-10">
-          <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase">Гардероб</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className={`px-6 py-3 rounded-full text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 ${showHistory ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-black hover:text-white'}`}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> История {generationHistory.length > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{generationHistory.length}</span>}
-            </button>
-
-          </div>
-        </div>
-
-        {/* History Section */}
-        {showHistory && (
-          <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium uppercase tracking-widest text-gray-600">История генераций</h3>
-              {generationHistory.length > 0 && (
+          {/* Selected Items Preview - Multi-select support */}
+          {selectedClothes.length > 0 && (
+            <div className="liquid-glass p-4 rounded-[24px] border border-white mt-4 animate-in fade-in slide-in-from-top-2 duration-500">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                  Выбрано вещей: {selectedClothes.length}
+                </p>
                 <button
-                  onClick={() => { setGenerationHistory([]); localStorage.removeItem('generation_history'); }}
-                  className="text-[9px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 transition-colors"
+                  onClick={() => { setSelectedClothes([]); setActiveCloth(null); setResultUrl(null); setIsBaseGenerated(false); }}
+                  className="text-[8px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 transition-colors"
                 >
-                  Очистить всё
+                  Очистить
                 </button>
-              )}
-            </div>
-            {generationHistory.length === 0 ? (
-              <div className="bg-gray-50 rounded-[32px] p-12 text-center">
-                <p className="text-gray-400 text-sm">История пуста</p>
-                <p className="text-[10px] text-gray-300 mt-2">Ваши генерации будут сохраняться здесь</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {generationHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => { setResultUrl(item.imageUrl); setIsBaseGenerated(true); }}
-                    className="relative group cursor-pointer rounded-[20px] overflow-hidden aspect-[3/4] bg-gray-100 border-2 border-transparent hover:border-black transition-all"
-                  >
-                    <img src={item.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-end justify-center opacity-0 group-hover:opacity-100">
-                      <div className="p-3 text-center">
-                        <p className="text-[9px] text-white font-bold uppercase tracking-widest bg-black/50 px-2 py-1 rounded-full">
-                          {new Date(item.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-                        </p>
-                      </div>
+              <div className="flex gap-2 overflow-x-auto p-2">
+                {selectedClothes.map((item, index) => (
+                  <div key={item.id} className="relative shrink-0 group">
+                    <div className="w-16 h-20 rounded-xl overflow-hidden bg-gray-100">
+                      <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
                     </div>
+                    <div className="absolute -top-1 -left-1 w-5 h-5 bg-black text-white rounded-full flex items-center justify-center text-[9px] font-bold">
+                      {index + 1}
+                    </div>
+                    {item.title && (
+                      <p className="text-[8px] text-gray-500 mt-1 w-16 truncate text-center">{item.title}</p>
+                    )}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-          {wardrobeLoading ? (
-            <div className="col-span-full flex justify-center py-20">
-              <div className="w-8 h-8 border-2 border-black rounded-full animate-spin border-t-transparent"></div>
             </div>
-          ) : wardrobePosts.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center justify-center text-center px-8 py-12 bg-gray-50 rounded-[32px]">
-              <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-              </svg>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">Здесь пока ничего нет</h3>
-              <p className="text-sm text-gray-500 max-w-md leading-relaxed">
-                После генерации нажмите «В гардероб», чтобы сохранить результат сюда.
-              </p>
-            </div>
-          ) : (
-            wardrobePosts.map(post => (
-              <div key={post.id}>
-                <PostCard post={post} onClick={setActiveCloth} onAuthorClick={onNavigateToProfile} hideActions={true} />
-              </div>
-            ))
           )}
         </div>
       </div >
+
+      {/* Wardrobe - only show when not embedded (HomeView has its own) */}
+      {!embedded && (
+        <div className="px-4 pb-20">
+          <div className="flex items-end justify-between mb-10">
+            <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase">Гардероб</h2>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`px-6 py-3 rounded-full text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 ${showHistory ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-black hover:text-white'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> История {generationHistory.length > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{generationHistory.length}</span>}
+              </button>
+
+            </div>
+          </div>
+
+          {/* History Section */}
+          {showHistory && (
+            <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium uppercase tracking-widest text-gray-600">История генераций</h3>
+                {generationHistory.length > 0 && (
+                  <button
+                    onClick={() => { setGenerationHistory([]); localStorage.removeItem('generation_history'); }}
+                    className="text-[9px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 transition-colors"
+                  >
+                    Очистить всё
+                  </button>
+                )}
+              </div>
+              {generationHistory.length === 0 ? (
+                <div className="bg-gray-50 rounded-[32px] p-12 text-center">
+                  <p className="text-gray-400 text-sm">История пуста</p>
+                  <p className="text-[10px] text-gray-300 mt-2">Ваши генерации будут сохраняться здесь</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {generationHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => setHistoryLightbox(item)}
+                      className="relative group cursor-pointer rounded-[20px] overflow-hidden aspect-[3/4] bg-gray-100 border-2 border-transparent hover:border-black transition-all"
+                    >
+                      <img src={item.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100">
+                        <svg className="w-8 h-8 text-white mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                        </svg>
+                        <p className="text-[9px] text-white font-bold uppercase tracking-widest">
+                          {new Date(item.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                        </p>
+                        {item.clothTitle && (
+                          <p className="text-[8px] text-white/70 mt-1 px-2 text-center truncate max-w-full">{item.clothTitle}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+            {wardrobeLoading ? (
+              <div className="col-span-full flex justify-center py-20">
+                <div className="w-8 h-8 border-2 border-black rounded-full animate-spin border-t-transparent"></div>
+              </div>
+            ) : wardrobePosts.length === 0 ? (
+              <div className="col-span-full flex flex-col items-center justify-center text-center px-8 py-12 bg-gray-50 rounded-[32px]">
+                <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                <h3 className="text-lg font-bold text-gray-800 mb-2">Здесь пока ничего нет</h3>
+                <p className="text-sm text-gray-500 max-w-md leading-relaxed">
+                  После генерации нажмите «В гардероб», чтобы сохранить результат сюда.
+                </p>
+              </div>
+            ) : (
+              wardrobePosts.map(post => (
+                <div key={post.id}>
+                  <PostCard post={post} onClick={setActiveCloth} onAuthorClick={onNavigateToProfile} hideActions={true} />
+                </div>
+              ))
+            )}
+          </div>
+        </div >
+      )}
 
 
       {
@@ -978,6 +1372,111 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, userRefere
           onConfirm={handleModalConfirm}
           onClose={() => setModalAction(null)}
         />
+      )}
+
+      {/* History Lightbox */}
+      {historyLightbox && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => setHistoryLightbox(null)}
+        >
+          {/* Close button */}
+          <button
+            onClick={() => setHistoryLightbox(null)}
+            className="absolute top-4 right-4 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all z-10"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* Content container */}
+          <div
+            className="relative flex flex-col md:flex-row items-center gap-6 max-w-5xl w-full animate-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Image */}
+            <div className="flex-1 max-h-[75vh]">
+              <img
+                src={historyLightbox.imageUrl}
+                alt="Генерация"
+                className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
+              />
+            </div>
+
+            {/* Actions panel */}
+            <div className="flex flex-col gap-3 w-full md:w-64 bg-white/10 backdrop-blur-md rounded-2xl p-4">
+              <div className="text-center mb-2">
+                <p className="text-white/50 text-[10px] uppercase tracking-widest mb-1">Дата генерации</p>
+                <p className="text-white font-bold">
+                  {new Date(historyLightbox.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+                {historyLightbox.clothTitle && (
+                  <p className="text-white/70 text-sm mt-1">{historyLightbox.clothTitle}</p>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleHistoryAddToWardrobe(historyLightbox)}
+                  className="flex-1 py-3 bg-white border border-black/10 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                  В гардероб
+                </button>
+                <button
+                  onClick={() => handleHistoryPublish(historyLightbox)}
+                  className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                  Опубликовать
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(historyLightbox.imageUrl);
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `fitting-room-${Date.now()}.png`;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      document.body.removeChild(a);
+                    } catch (e) { console.error("Download failed", e); }
+                  }}
+                  className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  Скачать
+                </button>
+                <button
+                  onClick={async () => {
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: 'Примерочная AI',
+                          text: 'Посмотрите, какой образ я создал!',
+                          url: historyLightbox.imageUrl
+                        });
+                      } catch (e) { console.error("Share failed", e); }
+                    }
+                  }}
+                  className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  Поделиться
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Hint text */}
+          <p className="absolute bottom-4 text-white/40 text-[10px] font-medium uppercase tracking-widest">
+            Нажмите на фон для закрытия
+          </p>
+        </div>
       )}
     </div>
   );

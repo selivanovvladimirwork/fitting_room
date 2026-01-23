@@ -2,7 +2,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Post, SearchResult, ProductSearchResult } from '../types';
 import PostCard from '../components/PostCard';
-import { postsApi, searchApi } from '../services/api';
+import Notification from '../components/Notification';
+import { postsApi, searchApi, favoriteExternalShopsApi, shopsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 interface FeedViewProps {
   onSelectPost: (post: Post, list: Post[]) => void;
@@ -27,6 +29,7 @@ const MOCK_POSTS: Post[] = [
 type SearchMode = 'posts' | 'shops';
 
 const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigateToProfile, onNavigateToShop }) => {
+  const { isAuthenticated, requireAuth } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMode, setSearchMode] = useState<SearchMode>('posts');
   const [allPosts, setAllPosts] = useState<Post[]>([]);
@@ -34,6 +37,44 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [favoriteShopDomains, setFavoriteShopDomains] = useState<Set<string>>(new Set());
+  const [notification, setNotification] = useState<{ message: string } | null>(null);
+  const [popularShops, setPopularShops] = useState<{ id: number; name: string; slug: string; logoUrl: string | null; domain: string; externalUrl: string | null }[]>([]);
+
+  // Toggle favorite shop
+  const handleToggleFavorite = (domain: string, url: string) => {
+    requireAuth(async () => {
+      try {
+        const isFavorite = favoriteShopDomains.has(domain);
+        if (isFavorite) {
+          await favoriteExternalShopsApi.remove(domain);
+          setFavoriteShopDomains(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(domain);
+            return newSet;
+          });
+          setNotification({ message: `${domain} удалён из избранного` });
+        } else {
+          await favoriteExternalShopsApi.add(domain, url);
+          setFavoriteShopDomains(prev => new Set([...prev, domain]));
+          setNotification({ message: `${domain} добавлен в избранное` });
+        }
+      } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+        setNotification({ message: 'Ошибка при обновлении избранного' });
+      }
+    });
+  };
+
+  // Check which shops are favorites when results change
+  useEffect(() => {
+    if (isAuthenticated && shopResults.length > 0) {
+      const domains = shopResults.map(r => r.domain);
+      favoriteExternalShopsApi.check(domains)
+        .then(res => setFavoriteShopDomains(new Set(res.favorites)))
+        .catch(() => { });
+    }
+  }, [isAuthenticated, shopResults]);
 
   // Load posts from API
   useEffect(() => {
@@ -49,6 +90,13 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
       }
     };
     loadPosts();
+  }, []);
+
+  // Load popular shops
+  useEffect(() => {
+    shopsApi.getPopular()
+      .then(shops => setPopularShops(shops))
+      .catch(() => setPopularShops([]));
   }, []);
 
   // Search products when mode is 'posts' and query is entered
@@ -165,14 +213,69 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
           )}
         </div>
 
+        {/* Популярные магазины - показываются если нет поискового запроса */}
+        {!hasQuery && popularShops.length > 0 && (
+          <div className="w-full max-w-5xl mt-12 animate-in fade-in slide-in-from-bottom-2 duration-500 px-2">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400 mb-6 text-center">
+              Популярные магазины
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {popularShops.map((shop) => (
+                <div
+                  key={shop.id}
+                  onClick={() => onNavigateToShop?.(shop.slug)}
+                  className="group bg-white rounded-3xl p-5 border border-gray-100 hover:border-black/20 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between gap-4"
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    {/* Логотип или заглушка */}
+                    {shop.logoUrl ? (
+                      <img
+                        src={shop.logoUrl}
+                        alt={shop.name}
+                        className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
+                        <span className="text-sm font-bold text-gray-400">
+                          {shop.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+
+                    <h3 className="font-bold text-lg text-black truncate group-hover:text-black/70 transition-colors">
+                      {shop.name}
+                    </h3>
+                  </div>
+
+                  {shop.externalUrl && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(shop.externalUrl!, '_blank', 'noopener,noreferrer');
+                      }}
+                      className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center hover:bg-black hover:text-white transition-all shrink-0"
+                      title="Перейти на сайт магазина"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7 17L17 7" />
+                        <path d="M7 7h10v10" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Фильтр Образы/Магазины */}
         {hasQuery && (
           <div className="flex gap-2 mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
             <button
               onClick={() => handleModeChange('posts')}
               className={`px-6 py-2 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all ${searchMode === 'posts'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:border-black'
+                ? 'bg-black text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-black'
                 }`}
             >
               Образы
@@ -180,8 +283,8 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
             <button
               onClick={() => handleModeChange('shops')}
               className={`px-6 py-2 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all ${searchMode === 'shops'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:border-black'
+                ? 'bg-black text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-black'
                 }`}
             >
               Магазины
@@ -214,7 +317,7 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
               <div key={post.id} className="break-inside-avoid mb-2 md:mb-4">
                 <PostCard
                   post={post}
-                  onClick={(p) => onFitPost(p)}
+                  onClick={(p) => onSelectPost(p, displayPosts)}
                   onFitClick={(e, p) => onFitPost(p)}
                   onAuthorClick={onNavigateToProfile}
                   hideActions={true}
@@ -242,25 +345,38 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
             {shopResults.map((result, index) => (
               <div
                 key={`${result.domain}-${index}`}
-                onClick={() => handleShopClick(result)}
-                className="group cursor-pointer bg-white rounded-3xl p-6 border border-gray-100 hover:border-black/20 hover:shadow-xl transition-all duration-300"
+                className="group bg-white rounded-3xl p-6 border border-gray-100 hover:border-black/20 hover:shadow-xl transition-all duration-300"
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-lg text-black truncate group-hover:text-black/80 transition-colors">
-                      {result.title}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-1 font-medium">
                       {result.domain}
-                    </p>
-                    {result.snippet && (
-                      <p className="text-sm text-gray-500 mt-3 line-clamp-2">
-                        {result.snippet}
-                      </p>
-                    )}
+                    </h3>
                   </div>
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-black group-hover:text-white transition-all">
-                    <span className="text-lg">↗</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(result.domain, result.url);
+                      }}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${favoriteShopDomains.has(result.domain)
+                        ? 'bg-red-50 text-red-500'
+                        : 'bg-gray-100 hover:bg-red-50 hover:text-red-500'
+                        }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill={favoriteShopDomains.has(result.domain) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleShopClick(result)}
+                      className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-black hover:text-white transition-all"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7 17L17 7" />
+                        <path d="M7 7h10v10" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -273,6 +389,14 @@ const FeedView: React.FC<FeedViewProps> = ({ onSelectPost, onFitPost, onNavigate
             <p className="text-sm text-gray-400 mt-2">Попробуйте другой запрос</p>
           </div>
         ) : null
+      )}
+
+      {/* Notification */}
+      {notification && (
+        <Notification
+          message={notification.message}
+          onClose={() => setNotification(null)}
+        />
       )}
     </div>
   );
