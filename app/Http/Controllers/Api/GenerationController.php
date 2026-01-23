@@ -97,6 +97,9 @@ class GenerationController extends Controller
                  $garmentDes = $this->getGarmentDescription($token, $vtonInput['garm_img']);
             }
             
+            // Pre-process garment: Remove background/person to get clean garment
+            $cleanGarmentUrl = $this->removeGarmentBackground($token, $vtonInput['garm_img']);
+            
             // Refine category based on Vision Caption (since user Title might be generic "Clothing Item")
             $category = $vtonInput['category'] ?? 'upper_body';
             
@@ -114,7 +117,7 @@ class GenerationController extends Controller
 
             $params = [
                 'human_img' => $this->ensureImageIsUrl($vtonInput['human_img']),
-                'garm_img' => $this->ensureImageIsUrl($vtonInput['garm_img']),
+                'garm_img' => $cleanGarmentUrl, // Use segmented garment (no background/person)
                 'garment_des' => $garmentDes,
                 'category' => $category,
                 'crop' => false, 
@@ -291,6 +294,69 @@ class GenerationController extends Controller
         } catch (\Exception $e) {
             Log::error("Caption Generation Error: " . $e->getMessage());
             return "clothing item";
+        }
+    }
+    
+    /**
+     * Remove background/person from garment image using RMBG-1.4
+     * Returns a clean garment-only image URL
+     */
+    private function removeGarmentBackground($token, $imageUrl)
+    {
+        try {
+            // Ensure we have a proper URL (not base64)
+            $imageUrl = $this->ensureImageIsUrl($imageUrl);
+            
+            Log::info("Removing background from garment: " . substr($imageUrl, 0, 50));
+            
+            $response = Http::withToken($token)
+                ->post(self::REPLICATE_API_BASE . "/models/cjwbw/rembg/predictions", [
+                    'input' => [
+                        'image' => $imageUrl
+                    ]
+                ]);
+                
+            if (!$response->successful()) {
+                Log::warning("RMBG Request Failed", ['body' => $response->body()]);
+                return $imageUrl; // Return original on error
+            }
+            
+            $data = $response->json();
+            $predId = $data['id'];
+            
+            // Poll for result (RMBG is usually fast ~2-5s)
+            $attempts = 0;
+            while ($attempts < 15) {
+                sleep(1);
+                $attempts++;
+                
+                $check = Http::withToken($token)->get(self::REPLICATE_API_BASE . "/predictions/{$predId}");
+                $statusData = $check->json();
+                
+                if ($statusData['status'] === 'succeeded') {
+                    $outputUrl = $statusData['output'];
+                    Log::info("Background removed successfully");
+                    
+                    // Save the segmented image to local storage
+                    try {
+                        $savedUrl = $this->saveUrlToStorage($outputUrl, 'png');
+                        return $savedUrl;
+                    } catch (\Exception $e) {
+                        return $outputUrl; // Use remote URL if save fails
+                    }
+                }
+                
+                if (in_array($statusData['status'], ['failed', 'canceled'])) {
+                    Log::warning("RMBG failed, using original image");
+                    break;
+                }
+            }
+            
+            return $imageUrl; // Return original on timeout
+            
+        } catch (\Exception $e) {
+            Log::error("Background Removal Error: " . $e->getMessage());
+            return $imageUrl; // Return original on error
         }
     }
 
