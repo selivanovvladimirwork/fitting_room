@@ -396,43 +396,71 @@ class GenerationController extends Controller
      */
     private function ensureImageUrl($imageData)
     {
-        // If already a URL, return as is
-        if (!str_starts_with($imageData, 'data:')) {
+        // If base64 data URI - save to temp file
+        if (str_starts_with($imageData, 'data:')) {
+            try {
+                if (preg_match('/^data:(image\/[a-z]+);base64,(.+)$/', $imageData, $matches)) {
+                    $mimeType = $matches[1];
+                    $base64Data = $matches[2];
+                    
+                    $extension = 'jpg';
+                    if (str_contains($mimeType, 'png')) $extension = 'png';
+                    elseif (str_contains($mimeType, 'webp')) $extension = 'webp';
+                    elseif (str_contains($mimeType, 'gif')) $extension = 'gif';
+                    
+                    $decoded = base64_decode($base64Data);
+                    if (!$decoded) {
+                         Log::warning("Failed to decode base64 image");
+                         return $imageData;
+                    }
+                    
+                    $filename = 'tmp_' . Str::random(16) . '.' . $extension;
+                    $path = 'temp_uploads/' . $filename;
+                    Storage::disk('public')->put($path, $decoded);
+                    
+                    $publicUrl = url('storage/' . $path);
+                    Log::info("Converted base64 to URL: " . $publicUrl);
+                    return $publicUrl;
+                }
+            } catch (\Exception $e) {
+                Log::error("Base64 conversion failed: " . $e->getMessage());
+            }
             return $imageData;
         }
         
-        try {
-            // Parse base64 data URI
-            if (preg_match('/^data:(image\/[a-z]+);base64,(.+)$/', $imageData, $matches)) {
-                $mimeType = $matches[1];
-                $base64Data = $matches[2];
+        // If external URL - download and re-host locally (fixes CORS/access issues for Replicate)
+        // Only re-host if it's from our admin domain or contains /public/ path issue
+        if (str_contains($imageData, 'adminfittingroom') || str_contains($imageData, '/public/storage/')) {
+            try {
+                Log::info("Re-hosting external URL: " . $imageData);
                 
-                // Determine extension from MIME type
-                $extension = 'jpg'; // default
-                if (str_contains($mimeType, 'png')) $extension = 'png';
-                elseif (str_contains($mimeType, 'webp')) $extension = 'webp';
-                elseif (str_contains($mimeType, 'gif')) $extension = 'gif';
+                // Fix common /public/storage/ path issue
+                $fixedUrl = str_replace('/public/storage/', '/storage/', $imageData);
                 
-                // Decode and save
-                $decoded = base64_decode($base64Data);
-                if (!$decoded) {
-                     Log::warning("Failed to decode base64 image");
-                     return $imageData; // Return original on failure
+                $response = Http::timeout(30)->get($fixedUrl);
+                
+                if ($response->successful()) {
+                    $contentType = $response->header('Content-Type') ?? 'image/jpeg';
+                    $extension = 'jpg';
+                    if (str_contains($contentType, 'png')) $extension = 'png';
+                    elseif (str_contains($contentType, 'webp')) $extension = 'webp';
+                    
+                    $filename = 'rehost_' . Str::random(16) . '.' . $extension;
+                    $path = 'temp_uploads/' . $filename;
+                    Storage::disk('public')->put($path, $response->body());
+                    
+                    $publicUrl = url('storage/' . $path);
+                    Log::info("Re-hosted to: " . $publicUrl);
+                    return $publicUrl;
+                } else {
+                    Log::warning("Failed to download URL: " . $fixedUrl . " Status: " . $response->status());
                 }
-                
-                $filename = 'tmp_' . Str::random(16) . '.' . $extension;
-                $path = 'temp_uploads/' . $filename;
-                Storage::disk('public')->put($path, $decoded);
-                
-                $publicUrl = url('storage/' . $path);
-                Log::info("Converted base64 to URL: " . $publicUrl);
-                return $publicUrl;
+            } catch (\Exception $e) {
+                Log::error("URL re-hosting failed: " . $e->getMessage());
             }
-        } catch (\Exception $e) {
-            Log::error("ensureImageUrl failed: " . $e->getMessage());
         }
         
-        // Return original if conversion fails
+        // Return original URL for other cases
         return $imageData;
     }
 
