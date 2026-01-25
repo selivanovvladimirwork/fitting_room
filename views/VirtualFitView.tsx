@@ -527,7 +527,9 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedIt
         // Single garment instruction
         messagesContent.push({
           type: "text",
-          text: `INSTRUCTION: Create a high-fidelity, photorealistic image of the TARGET MODEL wearing the GARMENT. 
+          text: `GARMENT TYPE/TITLE: ${clothesToUse[0].title || 'Clothing Item'}
+          
+          INSTRUCTION: Create a high-fidelity, photorealistic image of the TARGET MODEL wearing the GARMENT. 
 
 CLOTHING FIDELITY ANALYSIS:
 1. TEXTURE: Conduct a detailed study of the garment's material. Preserve the exact weave, sheen, and fabric weight (e.g., the stiffness of denim, the drape of silk, or the grain of leather).
@@ -598,7 +600,8 @@ OUTPUT ONLY THE IMAGE.`
       console.log("[DEBUG] Final Messages Structure:", messagesContent.map(m => m.type));
 
       // Выбор модели в зависимости от режима (фото/видео)
-      const selectedModel = mediaMode === 'video' ? 'kwaivgi/kling-v2.5-turbo-pro' : 'google/nano-banana';
+      // Для фото теперь используем специализированную VTON модель
+      const selectedModel = mediaMode === 'video' ? 'kwaivgi/kling-v2.5-turbo-pro' : 'cuuupid/idm-vton';
       console.log(`[DEBUG] Selected Model: ${selectedModel} (mediaMode: ${mediaMode})`);
 
       // Log payload size for debugging
@@ -805,11 +808,10 @@ OUTPUT ONLY THE IMAGE.`
         setActiveCloth({
           id: `c-${Date.now()}`,
           imageUrl: reader.result as string,
-          author: 'ВАША ВЕЩЬ',
-          likes: 0,
           isPrivate: true,
           tags: []
         });
+        setSelectedClothes([]); // Clear multi-select to prioritize upload
         setResultUrl(null);
       };
       reader.readAsDataURL(e.target.files[0]);
@@ -821,6 +823,7 @@ OUTPUT ONLY THE IMAGE.`
       const reader = new FileReader();
       reader.onloadend = () => {
         setCustomTargetImage(reader.result as string);
+        setGenerationMode('image'); // Switch to custom image mode
       };
       reader.readAsDataURL(e.target.files[0]);
     }
@@ -856,11 +859,10 @@ OUTPUT ONLY THE IMAGE.`
         setActiveCloth({
           id: `c-${Date.now()}`,
           imageUrl: reader.result as string,
-          author: 'ВАША ВЕЩЬ',
-          likes: 0,
           isPrivate: true,
           tags: []
         });
+        setSelectedClothes([]); // Clear multi-select to prioritize upload
         setResultUrl(null);
       };
       reader.readAsDataURL(e.target.files[0]);
@@ -871,11 +873,10 @@ OUTPUT ONLY THE IMAGE.`
     setActiveCloth({
       id: `c-${Date.now()}`,
       imageUrl: url,
-      author: 'ВАША ВЕЩЬ',
-      likes: 0,
       isPrivate: true,
       tags: []
     });
+    setSelectedClothes([]); // Clear multi-select to prioritize upload
     setResultUrl(null);
   };
 
@@ -992,6 +993,33 @@ OUTPUT ONLY THE IMAGE.`
               </div>
             </div>
 
+            {/* RESET & RETRY BUTTONS - Visible after generation */}
+            {resultUrl && (
+              <div className="flex gap-2 animate-in fade-in slide-in-from-top-2">
+                <button
+                  onClick={() => {
+                    setResultUrl(null);
+                    setInitialResultUrl(null);
+                    setIsBaseGenerated(false);
+                    setActiveCloth(null);
+                    setSelectedClothes([]);
+                    setCustomTargetImage(null);
+                    setGenerationMode(null);
+                  }}
+                  className="flex-1 py-3 bg-gray-100 text-black rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                >
+                  Сбросить
+                </button>
+                <button
+                  onClick={(e) => handleGenerate(e, 'STUDIO_DEFAULT')}
+                  disabled={isGenerating}
+                  className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isGenerating ? 'Загрузка' : 'Повторить'}
+                </button>
+              </div>
+            )}
+
             {/* IMAGE MODE UPLOAD */}
             {generationMode === 'image' && !isBaseGenerated && (
               <UploadZone
@@ -999,12 +1027,12 @@ OUTPUT ONLY THE IMAGE.`
                 image={customTargetImage}
                 onClear={() => { setGenerationMode(null); setCustomTargetImage(null); }}
                 onFile={handleCustomTargetUpload}
-                onUrl={(url) => setCustomTargetImage(url)}
+                onUrl={(url) => { setCustomTargetImage(url); setGenerationMode('image'); }}
                 isDragging={isDragging}
                 onDragEnter={handleDrag(setIsDragging)}
                 onDragLeave={handleDrag(setIsDragging)}
                 onDragOver={handleDrag(setIsDragging)}
-                onDrop={createDropHandler(setCustomTargetImage)}
+                onDrop={(e: React.DragEvent) => { createDropHandler(setCustomTargetImage)(e); setGenerationMode('image'); }}
               />
             )}
 

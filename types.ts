@@ -13,6 +13,7 @@ export enum View {
   SHOP = 'shop',
   SHOP_DETAIL = 'shop_detail',
   AVATAR_SETTINGS = 'avatar_settings',
+  INSTRUCTIONS = 'instructions',
   NOT_FOUND = 'not_found'
 }
 

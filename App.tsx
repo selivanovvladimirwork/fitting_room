@@ -12,6 +12,7 @@ import SubscriptionView from './views/SubscriptionView';
 import PostDetailView from './views/PostDetailView';
 import UserProfileView from './views/UserProfileView';
 import NotFoundView from './views/NotFoundView';
+import InstructionsView from './views/InstructionsView';
 
 import AuthModal from './components/AuthModal';
 import Notification from './components/Notification';
@@ -42,6 +43,7 @@ const parseRoute = (): { view: View; postId?: string; username?: string } => {
     '/settings': View.SETTINGS,
     '/subscription': View.SUBSCRIPTION,
     '/avatar-settings': View.AVATAR_SETTINGS,
+    '/instructions': View.INSTRUCTIONS,
   };
 
   return { view: routes[path] || View.NOT_FOUND };
@@ -204,6 +206,7 @@ const App: React.FC = () => {
       [View.SETTINGS]: '/settings',
       [View.SUBSCRIPTION]: '/subscription',
       [View.AVATAR_SETTINGS]: '/avatar-settings',
+      [View.INSTRUCTIONS]: '/instructions',
     };
 
     let newPath = routeMap[currentView] || '/';
@@ -328,6 +331,7 @@ const App: React.FC = () => {
           initialFittingPost={fittingPost}
           onSavePost={handleSavePost}
           onNavigateToFeed={() => setCurrentView(View.FEED)}
+          onNavigateToInstructions={() => setCurrentView(View.INSTRUCTIONS)}
         />
       );
       case View.AVATAR: return (
@@ -389,6 +393,8 @@ const App: React.FC = () => {
           onNavigateToProfile={handleNavigateToProfile}
         />
       );
+      case View.INSTRUCTIONS:
+        return <InstructionsView onBack={() => setCurrentView(View.HOME)} />;
       case View.POST_DETAIL:
         if (!selectedPost) {
           // No post selected - redirect to feed

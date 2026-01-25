@@ -207,7 +207,9 @@ export const catalogApi = {
 
 // ==================== Generation API ====================
 export const generationApi = {
-    async generateImage(data: { model: string; messages: any[] }) {
+    async generateImage(data: { model: string; messages: any[] }, retryCount = 0): Promise<any> {
+        const MAX_RETRIES = 3;
+
         // 1. Инициируем генерацию
         const initResponse = await fetch(`${API_BASE}/generate`, {
             method: 'POST',
@@ -220,6 +222,7 @@ export const generationApi = {
             requestId?: string;
             type?: string;
             result_url?: string;
+            is_valid?: boolean;
             choices?: any[];
             error?: string;
         }>(initResponse);
@@ -231,6 +234,11 @@ export const generationApi = {
         // Если генерация уже завершена (синхронный режим для изображений)
         if (initResult.status === 'completed') {
             console.log('[Generation] Completed immediately!', initResult.result_url);
+            // Check validation
+            if (initResult.is_valid === false && retryCount < MAX_RETRIES) {
+                console.warn(`[Generation] Validation failed, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+                return this.generateImage(data, retryCount + 1);
+            }
             return initResult;
         }
 
@@ -254,12 +262,24 @@ export const generationApi = {
             const statusResult = await handleResponse<{
                 status: string;
                 result_url?: string;
+                is_valid?: boolean;
                 choices?: any[];
                 error?: string;
             }>(statusResponse);
 
             if (statusResult.status === 'completed') {
                 console.log('[Generation] Completed!', statusResult.result_url);
+
+                // Check validation - if invalid, retry
+                if (statusResult.is_valid === false && retryCount < MAX_RETRIES) {
+                    console.warn(`[Generation] Validation failed - result doesn't show person wearing clothing. Retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+                    return this.generateImage(data, retryCount + 1);
+                }
+
+                if (statusResult.is_valid === false) {
+                    console.warn('[Generation] Validation failed but max retries reached, returning anyway');
+                }
+
                 // Возвращаем в старом формате для совместимости с остальным кодом
                 return statusResult;
             }
