@@ -78,9 +78,15 @@ class PaymentController extends Controller
             'status' => 'active',
         ]);
 
+        // GRANT TOKENS (MOCK Logic)
+        // In real app, this should happen after payment webhook
+        // We use 'photos_per_day' as the 'monthly_tokens' amount for now based on seeder
+        $user->tokens += $plan->photos_per_day; 
+        $user->save();
+
         return response()->json([
             'success' => true,
-            'message' => "Subscribed to {$plan->name}",
+            'message' => "Subscribed to {$plan->name}. Added {$plan->photos_per_day} tokens.",
         ]);
     }
 }
