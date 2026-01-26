@@ -11,36 +11,36 @@ class SubscriptionPlanSeeder extends Seeder
     {
         $plans = [
             [
-                'name' => 'БАЗОВЫЙ (Trial)',
+                'name' => 'БАЗОВЫЙ',
                 'price' => 0,
                 'period' => 'month',
-                'features' => ['10 токенов (Бонус при регистрации)', '1 токен = 1 фото', '5 токенов = 1 видео', 'Базовые сценарии'],
+                'features' => ['10 токенов в месяц', '1 токен = 1 фото', '5 токенов = 1 видео', '1 Цифровой двойник', 'Базовые сценарии'],
                 'twins_limit' => 1,
-                'photos_per_day' => 10, // Legacy field, logic moved to tokens
+                'photos_per_day' => 10,
                 'videos_per_day' => 0,
                 'video_quality' => 'low',
                 'is_active' => true,
                 'sort_order' => 1,
             ],
             [
-                'name' => 'СТАРТОВЫЙ (Standard)',
-                'price' => 490, // Was 490 -> 50 tokens
+                'name' => 'PROFESSIONAL',
+                'price' => 1490, 
                 'period' => 'month',
-                'features' => ['50 токенов / месяц', 'Эквивалент: ~50 фото или 10 видео', 'Безлимитные двойники', 'HD качество', 'Приоритет'],
+                'features' => ['50 токенов в месяц', 'Безлимитные двойники', 'HD видео (Google Veo)', 'Все сценарии', 'Приоритетная генерация'],
                 'twins_limit' => 99,
-                'photos_per_day' => 50, // Used as token grant amount in mock
+                'photos_per_day' => 50,
                 'videos_per_day' => 5,
                 'video_quality' => 'hd',
                 'is_active' => true,
                 'sort_order' => 2,
             ],
             [
-                'name' => 'ПРОФЕССИОНАЛЬНЫЙ (Pro)',
-                'price' => 990, // Was 990 -> 200 tokens
+                'name' => 'ELITE',
+                'price' => 4990,
                 'period' => 'month',
-                'features' => ['200 токенов / месяц', 'Эквивалент: ~200 фото или 40 видео', '4K Video генерация', 'Ранний доступ', 'Персональная поддержка'],
+                'features' => ['200 токенов в месяц', '200 фото или 40 видео', '4K видео генерация', 'Персональная LoRA тюнинг', 'Ранний доступ к фичам', 'Скрытые водяные знаки'],
                 'twins_limit' => 999,
-                'photos_per_day' => 200, // Used as token grant amount in mock
+                'photos_per_day' => 200,
                 'videos_per_day' => 15,
                 'video_quality' => '4k',
                 'is_active' => true,
@@ -50,7 +50,7 @@ class SubscriptionPlanSeeder extends Seeder
 
         foreach ($plans as $plan) {
             SubscriptionPlan::updateOrCreate(
-                ['name' => $plan['name']],
+                ['sort_order' => $plan['sort_order']],
                 $plan
             );
         }
