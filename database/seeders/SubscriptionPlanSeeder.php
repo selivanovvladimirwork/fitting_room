@@ -24,9 +24,9 @@ class SubscriptionPlanSeeder extends Seeder
             ],
             [
                 'name' => 'PROFESSIONAL',
-                'price' => 1490, 
+                'price' => 449, 
                 'period' => 'month',
-                'features' => ['50 токенов в месяц', 'Безлимитные двойники', 'HD видео (Google Veo)', 'Все сценарии', 'Приоритетная генерация'],
+                'features' => ['50 токенов в месяц', 'Безлимитные двойники', 'Все сценарии', 'Ранний доступ к фичам'],
                 'twins_limit' => 99,
                 'photos_per_day' => 50,
                 'videos_per_day' => 5,
@@ -36,9 +36,9 @@ class SubscriptionPlanSeeder extends Seeder
             ],
             [
                 'name' => 'ELITE',
-                'price' => 4990,
+                'price' => 990,
                 'period' => 'month',
-                'features' => ['200 токенов в месяц', '200 фото или 40 видео', '4K видео генерация', 'Персональная LoRA тюнинг', 'Ранний доступ к фичам', 'Скрытые водяные знаки'],
+                'features' => ['200 токенов в месяц', '200 фото или 40 видео', 'Приоритетная генерация', 'Ранний доступ к фичам'],
                 'twins_limit' => 999,
                 'photos_per_day' => 200,
                 'videos_per_day' => 15,
