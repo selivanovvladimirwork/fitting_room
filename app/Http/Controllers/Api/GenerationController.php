@@ -25,25 +25,30 @@ class GenerationController extends Controller
     {
         Log::info('=== GENERATION REQUEST START ===');
 
-        // Check payment limits
+        // Check token balance
         $user = Auth::user();
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
-        if (!$user->hasDailyLimit()) {
-            if (!$user->hasTokens()) {
-                return response()->json([
-                    'error' => 'Daily limit reached and no tokens available.',
-                    'code' => 'PAYMENT_REQUIRED'
-                ], 402);
-            }
-            $user->decrementTokens();
-            Log::info("User {$user->id} used a token. Remaining: {$user->tokens}");
-        } else {
-            $user->incrementDailyUsage();
-            Log::info("User {$user->id} used daily allowance. Count: {$user->daily_generations_count}");
+        // Determine requested model and cost
+        $requestedModel = $request->model;
+        $isVideo = str_contains(strtolower($requestedModel ?? ''), 'veo') || str_contains(strtolower($requestedModel ?? ''), 'kling');
+        $cost = $isVideo ? 5 : 1;
+
+        if ($user->tokens < $cost) {
+            return response()->json([
+                'error' => "Insufficient tokens. Required: {$cost}, Available: {$user->tokens}",
+                'code' => 'INSUFFICIENT_TOKENS',
+                'required_tokens' => $cost,
+                'available_tokens' => $user->tokens
+            ], 402);
         }
+
+        // Deduct tokens
+        $user->tokens -= $cost;
+        $user->save();
+        Log::info("User {$user->id} used {$cost} tokens for " . ($isVideo ? 'video' : 'image') . ". Remaining: {$user->tokens}");
         
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
