@@ -1,14 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { authApi, migrateLocalStorageToApi } from '../services/api';
-
-interface User {
-    id: number;
-    name: string;
-    nickname: string;
-    email: string;
-    bio?: string;
-    phone?: string;
-}
+import { User } from '../types';
 
 interface AuthContextType {
     isAuthenticated: boolean;

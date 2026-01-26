@@ -17,6 +17,44 @@ export enum View {
   NOT_FOUND = 'not_found'
 }
 
+export interface User {
+  id: number;
+  name: string;
+  nickname: string;
+  email: string;
+  bio?: string;
+  avatarUrl?: string; // from gravatar or local
+  tokens: number;
+  daily_generations_count: number;
+  last_generation_date?: string;
+  subscription?: Subscription;
+}
+
+export interface Subscription {
+  id: number;
+  status: string;
+  starts_at: string;
+  expires_at: string;
+  subscription_plan_id: number;
+}
+
+export interface SubscriptionPlan {
+  id: number;
+  name: string;
+  price: number;
+  period: string;
+  photos_per_day: number;
+  features: string[];
+}
+
+export interface TokenPackage {
+  id: number;
+  name: string;
+  tokens: number;
+  price: number;
+  currency: string;
+}
+
 export interface UserStats {
   height: number;
   weight: number;

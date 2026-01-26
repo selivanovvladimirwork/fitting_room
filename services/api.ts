@@ -3,6 +3,8 @@
  * Взаимодействие с backend
  */
 
+import { User, SubscriptionPlan, TokenPackage } from '../types';
+
 // Автоопределение: локалка или продакшен
 const API_BASE = window.location.hostname === 'fittingroom.loc'
     ? 'https://fittingadmin.loc/api'
@@ -87,7 +89,7 @@ export const authApi = {
         const response = await fetch(`${API_BASE}/user`, {
             headers: getHeaders(true),
         });
-        return handleResponse<{ id: number; name: string; nickname: string; email: string; bio?: string }>(response);
+        return handleResponse<User>(response);
     },
 
     isAuthenticated(): boolean {
@@ -562,6 +564,41 @@ export const migrationApi = {
     },
 };
 
+// ==================== Payment API ====================
+export const paymentApi = {
+    async getPackages() {
+        const response = await fetch(`${API_BASE}/packages`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<TokenPackage[]>(response);
+    },
+
+    async purchasePackage(packageId: number) {
+        const response = await fetch(`${API_BASE}/purchase-package`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify({ package_id: packageId }),
+        });
+        return handleResponse<{ success: boolean; message: string; new_balance: number }>(response);
+    },
+
+    async getSubscriptionPlans() {
+        const response = await fetch(`${API_BASE}/subscription-plans`, {
+            headers: getHeaders(true),
+        });
+        return handleResponse<SubscriptionPlan[]>(response);
+    },
+
+    async subscribe(planId: number) {
+        const response = await fetch(`${API_BASE}/subscribe`, {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify({ plan_id: planId }),
+        });
+        return handleResponse<{ success: boolean; message: string }>(response);
+    }
+};
+
 // ==================== Helper: Migrate localStorage on first login ====================
 export async function migrateLocalStorageToApi(): Promise<void> {
     const migrationDone = localStorage.getItem('api_migration_done');
@@ -603,5 +640,6 @@ export default {
     migration: migrationApi,
     generation: generationApi,
     shops: shopsApi,
+    payment: paymentApi,
     migrateLocalStorageToApi,
 };

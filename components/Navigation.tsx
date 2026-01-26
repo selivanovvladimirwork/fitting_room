@@ -7,10 +7,12 @@ interface NavigationProps {
   setView: (view: View) => void;
 }
 
+import { TokenIcon } from './TokenIcon';
+
 import { useAuth } from '../context/AuthContext';
 
 const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
-  const { requireAuth } = useAuth();
+  const { requireAuth, user, isAuthenticated } = useAuth();
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [pillStyle, setPillStyle] = useState({ width: 0, left: 0 });
@@ -18,8 +20,8 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
 
   const navItems = [
     { id: View.FEED, label: 'Поиск', protected: false },
-    { id: View.HOME, label: 'Примерочная', protected: false }, // Renamed from Recommendations
-    { id: View.AVATAR, label: 'Мой профиль', protected: true },
+    { id: View.HOME, label: 'Примерочная', protected: false },
+    { id: View.AVATAR, label: 'Профиль', protected: true },
   ];
 
   useEffect(() => {
@@ -111,7 +113,8 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
       <div className="w-full max-w-7xl mx-auto px-2 md:px-6 flex items-center justify-center md:justify-between pointer-events-auto">
 
         {/* Логотип - центрирован на мобилках */}
-        <div className="flex items-center justify-center">
+        {/* Логотип - слева */}
+        <div className="flex items-center justify-center z-20">
           <div
             className="logo-container group relative px-6 md:px-8 py-3 md:py-3.5 cursor-pointer liquid-glass rounded-full transition-all duration-500 hover:scale-105 active:scale-95 flex items-center justify-center border-white/60 overflow-hidden shadow-[0_40px_80px_-15px_rgba(0,0,0,0.3)]"
             onClick={handleLogoClick}
@@ -136,8 +139,8 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
           </div>
         </div>
 
-        {/* Меню навигации - скрыто на мобилках */}
-        <div className="hidden md:flex liquid-glass-dark p-1 rounded-full shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] items-center relative transition-all">
+        {/* Меню навигации - по центру (абсолютно) */}
+        <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 liquid-glass-dark p-1 rounded-full shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] items-center transition-all z-10">
           <div
             className="absolute top-1 bottom-1 bg-white rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.05)] transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1)"
             style={{
@@ -166,6 +169,27 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
             </button>
           ))}
         </div>
+
+        {/* Token Balance - Desktop Only (Right Side) */}
+        {isAuthenticated && user && (
+          <div className="hidden md:flex items-center justify-end z-20">
+            <div className="flex items-center gap-3 liquid-glass-dark pl-5 pr-2 py-2 rounded-full shadow-sm animate-in fade-in slide-in-from-right-4">
+              <div className="flex flex-col items-end leading-none justify-center h-full">
+                <span className="text-[13px] font-bold text-black flex items-center gap-1">
+                  {user.tokens ?? 0}
+                  <TokenIcon className="w-4 h-4 text-yellow-500" />
+                </span>
+              </div>
+              <button
+                onClick={() => setView(View.SUBSCRIPTION)}
+                className="w-9 h-9 rounded-full bg-black text-white flex items-center justify-center hover:bg-zinc-800 transition-all shadow-md hover:scale-105 active:scale-95 group"
+                title="Купить токены"
+              >
+                <svg className="w-4 h-4 transition-transform group-hover:rotate-90 duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </nav>

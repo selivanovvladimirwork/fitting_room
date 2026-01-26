@@ -2,8 +2,12 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Scenario, Post, DigitalTwin } from '../types';
 import PostCard from '../components/PostCard';
 import { generationApi, wardrobeApi, postsApi, savedLooksApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { TokenIcon } from '../components/TokenIcon';
 import Notification from '../components/Notification';
 import ProductInfoModal from '../components/ProductInfoModal';
+import InsufficientTokensModal from '../components/InsufficientTokensModal';
+
 
 interface VirtualFitViewProps {
   initialPost?: Post | null;
@@ -11,23 +15,12 @@ interface VirtualFitViewProps {
   userReferences?: string[]; // База фотографий пользователя
   embedded?: boolean;
   onNavigateToProfile?: (username: string) => void;
+  onNavigateSubscription?: () => void;
   avatars?: DigitalTwin[];
   activeAvatarId?: string | null;
   onSetActiveAvatar?: (id: string) => void;
   onSavePost?: (post: Post) => void;
 }
-
-// ... SlidingTabs and UploadZone (omitted for brevity, assume they remain)
-
-
-// ... existing state ...
-// (Assuming context is preserved by replacement tools smarter logic or I need to replace strictly)
-
-// Since I can't easily skip lines with replace_file_content if I'm not careful, I will target specific blocks.
-
-// Actually, I will split this into two calls.
-// 1. Update imports and Interface.
-// 2. Insert the UI.
 
 
 const SlidingTabs = ({ options, value, onChange }: { options: { id: string, label: string }[], value: string, onChange: (val: any) => void }) => {
@@ -171,7 +164,14 @@ const UploadZone = ({
   );
 };
 
-const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedItems = [], userReferences = [], embedded = false, onNavigateToProfile, avatars, activeAvatarId, onSetActiveAvatar, onSavePost }) => {
+const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedItems = [], userReferences = [], embedded = false, onNavigateToProfile,
+  onNavigateSubscription,
+  avatars,
+  activeAvatarId,
+  onSetActiveAvatar,
+  onSavePost,
+}) => {
+  const { user, requireAuth, refreshUser } = useAuth();
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [isBaseGenerated, setIsBaseGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -182,6 +182,8 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedIt
   const [selectedClothes, setSelectedClothes] = useState<Post[]>([]);
   const [showKeyHint, setShowKeyHint] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [tokenRequired, setTokenRequired] = useState(1);
   const [mediaMode, setMediaMode] = useState<'photo' | 'video'>('photo');
   const [generationMode, setGenerationMode] = useState<'avatar' | 'image' | null>(null);
   const [customTargetImage, setCustomTargetImage] = useState<string | null>(null);
@@ -367,6 +369,14 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedIt
 
     if (!activeCloth) return;
 
+    // Token Check Logic
+    const cost = (mediaMode === 'video') ? 5 : 1;
+    if (user && (user.tokens ?? 0) < cost) {
+      setTokenRequired(cost);
+      setIsTokenModalOpen(true);
+      return;
+    }
+
     // Для видео режима требуется сначала сгенерированное фото
     if (mediaMode === 'video' && !resultUrl) {
       setErrorMessage('Сначала сгенерируйте фото, затем нажмите "Анимировать"');
@@ -448,6 +458,7 @@ const VirtualFitView: React.FC<VirtualFitViewProps> = ({ initialPost, selectedIt
               timestamp: Date.now(),
               clothTitle: activeCloth?.title || 'Видео'
             }, ...prev].slice(0, 50));
+            refreshUser();
           } else {
             throw new Error("No video URL in response");
           }
@@ -635,6 +646,9 @@ OUTPUT ONLY THE IMAGE.`
           timestamp: Date.now(),
           clothTitle: activeCloth?.title || activeCloth?.author
         }, ...prev].slice(0, 50)); // Keep last 50
+
+        // Refresh user tokens
+        refreshUser();
       } else if (finishReason === 'IMAGE_OTHER' || (finishReason === 'stop' && !message?.content)) {
         throw new Error("Generation blocked by Safety Filters (IMAGE_OTHER). Try a different photo.");
       } else if (message?.content) {
@@ -1103,7 +1117,16 @@ OUTPUT ONLY THE IMAGE.`
                     disabled={!activeCloth || isGenerating || (generationMode === 'image' && !customTargetImage)}
                     className="w-full py-4 bg-black text-white rounded-full text-xs font-bold uppercase tracking-widest transition-all text-center flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    {isGenerating ? 'Примерка...' : 'Надеть'}
+                    {isGenerating ? 'Примерка...' : (
+                      <span className="flex items-center gap-2">
+                        Надеть {user && (
+                          <>
+                            <span className="opacity-50">/</span>
+                            <span className="flex items-center gap-1">1 <TokenIcon className="w-3 h-3 text-yellow-500" /></span>
+                          </>
+                        )}
+                      </span>
+                    )}
                   </button>
                   <p className="text-[9px] text-gray-300 text-center leading-relaxed">
                     Сначала мы создадим базовый образ, а затем вы сможете выбрать сценарий.
@@ -1145,7 +1168,17 @@ OUTPUT ONLY THE IMAGE.`
                         className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
                           } disabled:opacity-20`}
                       >
-                        {s.label}
+                        <span className="flex items-center justify-center gap-2">
+                          {s.label}
+                          {user && (
+                            <>
+                              <span className="opacity-50">/</span>
+                              {user.daily_generations_count < 10 ? 'Бесплатно' : (
+                                <span className="flex items-center gap-1">1 <TokenIcon className="w-3 h-3 text-yellow-500" /></span>
+                              )}
+                            </>
+                          )}
+                        </span>
                       </button>
                     ))}
                   </>
@@ -1178,7 +1211,15 @@ OUTPUT ONLY THE IMAGE.`
                           className={`w-full py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectedScenario === s.id ? 'bg-white text-black scale-[1.03]' : 'bg-black text-white hover:bg-zinc-800'
                             } disabled:opacity-20`}
                         >
-                          {s.label}
+                          <span className="flex items-center justify-center gap-2">
+                            {s.label}
+                            {user && (
+                              <>
+                                <span className="opacity-50">/</span>
+                                <span className="flex items-center gap-1">5 <TokenIcon className="w-3 h-3 text-yellow-500" /></span>
+                              </>
+                            )}
+                          </span>
                         </button>
                       ))
                     ) : (
@@ -1208,7 +1249,17 @@ OUTPUT ONLY THE IMAGE.`
                           onClick={(e) => handleGenerate(e, 'CUSTOM_ANIMATION')}
                           className="w-full py-4 bg-black text-white rounded-full text-xs font-bold uppercase tracking-widest transition-all text-center flex items-center justify-center gap-2 disabled:opacity-30 hover:bg-zinc-800 mt-2"
                         >
-                          {isGenerating ? 'Создаётся...' : '✨ Создать анимацию'}
+                          {isGenerating ? 'Создаётся...' : (
+                            <span className="flex items-center gap-2">
+                              ✨ Создать анимацию
+                              {user && (
+                                <>
+                                  <span className="opacity-50">/</span>
+                                  <span className="flex items-center gap-1">5 <TokenIcon className="w-3 h-3 text-yellow-500" /></span>
+                                </>
+                              )}
+                            </span>
+                          )}
                         </button>
                       </>
                     )}
@@ -1297,102 +1348,113 @@ OUTPUT ONLY THE IMAGE.`
       </div >
 
       {/* Wardrobe - only show when not embedded (HomeView has its own) */}
-      {!embedded && (
-        <div className="px-4 pb-20">
-          <div className="flex items-end justify-between mb-10">
-            <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase">Гардероб</h2>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className={`px-6 py-3 rounded-full text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 ${showHistory ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-black hover:text-white'}`}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> История {generationHistory.length > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{generationHistory.length}</span>}
-              </button>
+      {
+        !embedded && (
+          <div className="px-4 pb-20">
+            <div className="flex items-end justify-between mb-10">
+              <h2 className="text-4xl md:text-5xl font-thin tracking-widest uppercase">Гардероб</h2>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className={`px-6 py-3 rounded-full text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 ${showHistory ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-black hover:text-white'}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> История {generationHistory.length > 0 && <span className="bg-white/20 px-2 py-0.5 rounded-full">{generationHistory.length}</span>}
+                </button>
 
+              </div>
             </div>
-          </div>
 
-          {/* History Section */}
-          {showHistory && (
-            <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-medium uppercase tracking-widest text-gray-600">История генераций</h3>
-                {generationHistory.length > 0 && (
-                  <button
-                    onClick={() => { setGenerationHistory([]); localStorage.removeItem('generation_history'); }}
-                    className="text-[9px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 transition-colors"
-                  >
-                    Очистить всё
-                  </button>
+            {/* History Section */}
+            {showHistory && (
+              <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-medium uppercase tracking-widest text-gray-600">История генераций</h3>
+                  {generationHistory.length > 0 && (
+                    <button
+                      onClick={() => { setGenerationHistory([]); localStorage.removeItem('generation_history'); }}
+                      className="text-[9px] font-bold uppercase tracking-widest text-red-400 hover:text-red-500 transition-colors"
+                    >
+                      Очистить всё
+                    </button>
+                  )}
+                </div>
+                {generationHistory.length === 0 ? (
+                  <div className="bg-gray-50 rounded-[32px] p-12 text-center">
+                    <p className="text-gray-400 text-sm">История пуста</p>
+                    <p className="text-[10px] text-gray-300 mt-2">Ваши генерации будут сохраняться здесь</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {generationHistory.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => setHistoryLightbox(item)}
+                        className="relative group cursor-pointer rounded-[20px] overflow-hidden aspect-[3/4] bg-gray-100 border-2 border-transparent hover:border-black transition-all"
+                      >
+                        <img src={item.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100">
+                          <svg className="w-8 h-8 text-white mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                          </svg>
+                          <p className="text-[9px] text-white font-bold uppercase tracking-widest">
+                            {new Date(item.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                          </p>
+                          {item.clothTitle && (
+                            <p className="text-[8px] text-white/70 mt-1 px-2 text-center truncate max-w-full">{item.clothTitle}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-              {generationHistory.length === 0 ? (
-                <div className="bg-gray-50 rounded-[32px] p-12 text-center">
-                  <p className="text-gray-400 text-sm">История пуста</p>
-                  <p className="text-[10px] text-gray-300 mt-2">Ваши генерации будут сохраняться здесь</p>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+              {wardrobeLoading ? (
+                <div className="col-span-full flex justify-center py-20">
+                  <div className="w-8 h-8 border-2 border-black rounded-full animate-spin border-t-transparent"></div>
+                </div>
+              ) : wardrobePosts.length === 0 ? (
+                <div className="col-span-full flex flex-col items-center justify-center text-center px-8 py-12 bg-gray-50 rounded-[32px]">
+                  <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">Здесь пока ничего нет</h3>
+                  <p className="text-sm text-gray-500 max-w-md leading-relaxed">
+                    После генерации нажмите «В гардероб», чтобы сохранить результат сюда.
+                  </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {generationHistory.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setHistoryLightbox(item)}
-                      className="relative group cursor-pointer rounded-[20px] overflow-hidden aspect-[3/4] bg-gray-100 border-2 border-transparent hover:border-black transition-all"
-                    >
-                      <img src={item.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100">
-                        <svg className="w-8 h-8 text-white mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                        </svg>
-                        <p className="text-[9px] text-white font-bold uppercase tracking-widest">
-                          {new Date(item.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-                        </p>
-                        {item.clothTitle && (
-                          <p className="text-[8px] text-white/70 mt-1 px-2 text-center truncate max-w-full">{item.clothTitle}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                wardrobePosts.map(post => (
+                  <div key={post.id}>
+                    <PostCard post={post} onClick={setActiveCloth} onAuthorClick={onNavigateToProfile} hideActions={true} />
+                  </div>
+                ))
               )}
             </div>
-          )}
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-            {wardrobeLoading ? (
-              <div className="col-span-full flex justify-center py-20">
-                <div className="w-8 h-8 border-2 border-black rounded-full animate-spin border-t-transparent"></div>
-              </div>
-            ) : wardrobePosts.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center justify-center text-center px-8 py-12 bg-gray-50 rounded-[32px]">
-                <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
-                <h3 className="text-lg font-bold text-gray-800 mb-2">Здесь пока ничего нет</h3>
-                <p className="text-sm text-gray-500 max-w-md leading-relaxed">
-                  После генерации нажмите «В гардероб», чтобы сохранить результат сюда.
-                </p>
-              </div>
-            ) : (
-              wardrobePosts.map(post => (
-                <div key={post.id}>
-                  <PostCard post={post} onClick={setActiveCloth} onAuthorClick={onNavigateToProfile} hideActions={true} />
-                </div>
-              ))
-            )}
-          </div>
-        </div >
-      )}
-
-
-      {
-        notification && (
-          <Notification
-            message={notification.message}
-            onClose={() => setNotification(null)}
-          />
+          </div >
         )
       }
+
+
+      {notification && (
+        <Notification
+          message={notification.message}
+          onClose={() => setNotification(null)}
+        />
+      )}
+
+      <InsufficientTokensModal
+        isOpen={isTokenModalOpen}
+        onClose={() => setIsTokenModalOpen(false)}
+        required={tokenRequired}
+        available={user?.tokens ?? 0}
+        onBuyTokens={() => {
+          setIsTokenModalOpen(false);
+          if (onNavigateSubscription) onNavigateSubscription();
+        }}
+      />
 
       {modalAction && (
         <ProductInfoModal
@@ -1403,110 +1465,112 @@ OUTPUT ONLY THE IMAGE.`
       )}
 
       {/* History Lightbox */}
-      {historyLightbox && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
-          onClick={() => setHistoryLightbox(null)}
-        >
-          {/* Close button */}
-          <button
-            onClick={() => setHistoryLightbox(null)}
-            className="absolute top-4 right-4 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all z-10"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-
-          {/* Content container */}
+      {
+        historyLightbox && (
           <div
-            className="relative flex flex-col md:flex-row items-center gap-6 max-w-5xl w-full animate-in zoom-in-95 duration-300"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300"
+            onClick={() => setHistoryLightbox(null)}
           >
-            {/* Image */}
-            <div className="flex-1 max-h-[75vh]">
-              <img
-                src={historyLightbox.imageUrl}
-                alt="Генерация"
-                className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
-              />
-            </div>
+            {/* Close button */}
+            <button
+              onClick={() => setHistoryLightbox(null)}
+              className="absolute top-4 right-4 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all z-10"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
 
-            {/* Actions panel */}
-            <div className="flex flex-col gap-3 w-full md:w-64 bg-white/10 backdrop-blur-md rounded-2xl p-4">
-              <div className="text-center mb-2">
-                <p className="text-white/50 text-[10px] uppercase tracking-widest mb-1">Дата генерации</p>
-                <p className="text-white font-bold">
-                  {new Date(historyLightbox.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </p>
-                {historyLightbox.clothTitle && (
-                  <p className="text-white/70 text-sm mt-1">{historyLightbox.clothTitle}</p>
-                )}
+            {/* Content container */}
+            <div
+              className="relative flex flex-col md:flex-row items-center gap-6 max-w-5xl w-full animate-in zoom-in-95 duration-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Image */}
+              <div className="flex-1 max-h-[75vh]">
+                <img
+                  src={historyLightbox.imageUrl}
+                  alt="Генерация"
+                  className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
+                />
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleHistoryAddToWardrobe(historyLightbox)}
-                  className="flex-1 py-3 bg-white border border-black/10 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                  В гардероб
-                </button>
-                <button
-                  onClick={() => handleHistoryPublish(historyLightbox)}
-                  className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                  Опубликовать
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={async () => {
-                    try {
-                      const response = await fetch(historyLightbox.imageUrl);
-                      const blob = await response.blob();
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `fitting-room-${Date.now()}.png`;
-                      document.body.appendChild(a);
-                      a.click();
-                      window.URL.revokeObjectURL(url);
-                      document.body.removeChild(a);
-                    } catch (e) { console.error("Download failed", e); }
-                  }}
-                  className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
-                >
-                  Скачать
-                </button>
-                <button
-                  onClick={async () => {
-                    if (navigator.share) {
+              {/* Actions panel */}
+              <div className="flex flex-col gap-3 w-full md:w-64 bg-white/10 backdrop-blur-md rounded-2xl p-4">
+                <div className="text-center mb-2">
+                  <p className="text-white/50 text-[10px] uppercase tracking-widest mb-1">Дата генерации</p>
+                  <p className="text-white font-bold">
+                    {new Date(historyLightbox.timestamp).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                  {historyLightbox.clothTitle && (
+                    <p className="text-white/70 text-sm mt-1">{historyLightbox.clothTitle}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleHistoryAddToWardrobe(historyLightbox)}
+                    className="flex-1 py-3 bg-white border border-black/10 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                    В гардероб
+                  </button>
+                  <button
+                    onClick={() => handleHistoryPublish(historyLightbox)}
+                    className="flex-1 py-3 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                    Опубликовать
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
                       try {
-                        await navigator.share({
-                          title: 'Примерочная AI',
-                          text: 'Посмотрите, какой образ я создал!',
-                          url: historyLightbox.imageUrl
-                        });
-                      } catch (e) { console.error("Share failed", e); }
-                    }
-                  }}
-                  className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
-                >
-                  Поделиться
-                </button>
+                        const response = await fetch(historyLightbox.imageUrl);
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `fitting-room-${Date.now()}.png`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                      } catch (e) { console.error("Download failed", e); }
+                    }}
+                    className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                  >
+                    Скачать
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (navigator.share) {
+                        try {
+                          await navigator.share({
+                            title: 'Примерочная AI',
+                            text: 'Посмотрите, какой образ я создал!',
+                            url: historyLightbox.imageUrl
+                          });
+                        } catch (e) { console.error("Share failed", e); }
+                      }
+                    }}
+                    className="flex-1 py-3 bg-white border border-gray-100 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center gap-2"
+                  >
+                    Поделиться
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Hint text */}
-          <p className="absolute bottom-4 text-white/40 text-[10px] font-medium uppercase tracking-widest">
-            Нажмите на фон для закрытия
-          </p>
-        </div>
-      )}
-    </div>
+            {/* Hint text */}
+            <p className="absolute bottom-4 text-white/40 text-[10px] font-medium uppercase tracking-widest">
+              Нажмите на фон для закрытия
+            </p>
+          </div>
+        )
+      }
+    </div >
   );
 };
 
