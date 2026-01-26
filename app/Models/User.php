@@ -33,6 +33,9 @@ class User extends Authenticatable implements FilamentUser
         'phone',
         'email',
         'password',
+        'tokens',
+        'daily_generations_count',
+        'last_generation_date',
     ];
 
     /**
@@ -146,5 +149,77 @@ class User extends Authenticatable implements FilamentUser
     public function savedLooks(): HasMany
     {
         return $this->hasMany(SavedLook::class);
+    }
+
+    /**
+     * Текущая подписка пользователя
+     */
+    public function subscription()
+    {
+        return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    /**
+     * Активная подписка
+     */
+    public function activeSubscription()
+    {
+        return $this->hasOne(Subscription::class)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now());
+    }
+
+    /**
+     * Сбросить дневной лимит если наступил новый день
+     */
+    public function resetDailyUsageIfNeeded(): void
+    {
+        $today = now()->format('Y-m-d');
+        if ($this->last_generation_date !== $today) {
+            $this->daily_generations_count = 0;
+            $this->last_generation_date = $today;
+            $this->save();
+        }
+    }
+
+    /**
+     * Проверить, есть ли дневной лимит
+     */
+    public function hasDailyLimit(): bool
+    {
+        $this->resetDailyUsageIfNeeded();
+
+        $subscription = $this->activeSubscription;
+        $limit = $subscription ? $subscription->subscriptionPlan->photos_per_day : 1; // Default 1 for free/no-sub
+
+        return $this->daily_generations_count < $limit;
+    }
+
+    /**
+     * Проверить, есть ли токены
+     */
+    public function hasTokens(): bool
+    {
+        return $this->tokens > 0;
+    }
+
+    /**
+     * Увеличить счетчик дневного использования
+     */
+    public function incrementDailyUsage(): void
+    {
+        $this->daily_generations_count++;
+        $this->save();
+    }
+
+    /**
+     * Списать токен
+     */
+    public function decrementTokens(int $amount = 1): void
+    {
+        if ($this->tokens >= $amount) {
+            $this->tokens -= $amount;
+            $this->save();
+        }
     }
 }

@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\FavoriteExternalShopController;
 use App\Http\Controllers\Api\SavedLookController;
+use App\Http\Controllers\Api\PaymentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -102,5 +103,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/saved-looks', [SavedLookController::class, 'index']);
     Route::post('/saved-looks', [SavedLookController::class, 'store']);
     Route::delete('/saved-looks/{id}', [SavedLookController::class, 'destroy']);
+    
+    // Payment & Subscriptions
+    Route::get('/packages', [PaymentController::class, 'getPackages']);
+    Route::get('/subscription-plans', [PaymentController::class, 'getSubscriptionPlans']);
+    Route::post('/purchase-package', [PaymentController::class, 'purchasePackage']);
+    Route::post('/subscribe', [PaymentController::class, 'subscribe']);
 });
 

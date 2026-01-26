@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class GenerationController extends Controller
@@ -23,6 +24,26 @@ class GenerationController extends Controller
     public function generate(Request $request)
     {
         Log::info('=== GENERATION REQUEST START ===');
+
+        // Check payment limits
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
+        }
+
+        if (!$user->hasDailyLimit()) {
+            if (!$user->hasTokens()) {
+                return response()->json([
+                    'error' => 'Daily limit reached and no tokens available.',
+                    'code' => 'PAYMENT_REQUIRED'
+                ], 402);
+            }
+            $user->decrementTokens();
+            Log::info("User {$user->id} used a token. Remaining: {$user->tokens}");
+        } else {
+            $user->incrementDailyUsage();
+            Log::info("User {$user->id} used daily allowance. Count: {$user->daily_generations_count}");
+        }
         
         $settings = AiApiSetting::getInstance();
         $apiKey = $settings->api_key;
