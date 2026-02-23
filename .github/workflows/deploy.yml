@@ -1,4 +1,4 @@
-name: Deploy to Production
+name: Deploy Backend
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy via FTP
+    name: Deploy Backend via FTP
     runs-on: ubuntu-latest
 
     steps:
@@ -30,7 +30,7 @@ jobs:
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASS }}
           local-dir: ./
-          server-dir: /www/
+          server-dir: /www/admin.vgarderob.com/
           exclude: |
             **/.git*
             **/.git*/**
