@@ -24,6 +24,10 @@ return [
         'http://fittingroom.loc',
         'https://fittingroom.fixers.su',
         'http://fittingroom.fixers.su',
+        'https://vgarderob.com',
+        'http://vgarderob.com',
+        'https://www.vgarderob.com',
+        'http://www.vgarderob.com',
     ],
 
     'allowed_origins_patterns' => [],
