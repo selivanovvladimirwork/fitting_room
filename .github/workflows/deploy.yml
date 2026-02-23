@@ -34,3 +34,6 @@ jobs:
           password: ${{ secrets.FTP_PASS }}
           local-dir: ./dist/
           server-dir: /www/vgarderob.com/
+          timeout: 600000
+          protocol: ftp
+          log-level: verbose
