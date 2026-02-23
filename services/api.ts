@@ -8,7 +8,7 @@ import { User, SubscriptionPlan, TokenPackage } from '../types';
 // Автоопределение: локалка или продакшен
 const API_BASE = window.location.hostname === 'fittingroom.loc'
     ? 'https://fittingadmin.loc/api'
-    : 'https://adminfittingroom.fixers.su/api';
+    : 'https://admin.vgarderob.com/api';
 
 // Получить токен из localStorage
 const getToken = (): string | null => {
