@@ -22,6 +22,8 @@ jobs:
           password: ${{ secrets.FTP_PASS }}
           local-dir: ./
           server-dir: /www/admin.vgarderob.com/
+          timeout: 600000
+          protocol: ftp
           exclude: |
             **/.git*
             **/.git*/**
