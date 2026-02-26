@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
@@ -48,8 +49,15 @@ class UserResource extends Resource
                 Forms\Components\TextInput::make('password')
                     ->label('Пароль')
                     ->password()
-                    ->required()
+                    ->dehydrateStateUsing(fn ($state) => filled($state) ? bcrypt($state) : null)
+                    ->dehydrated(fn ($state) => filled($state))
+                    ->required(fn (string $context): bool => $context === 'create')
                     ->maxLength(255),
+                Forms\Components\TextInput::make('tokens')
+                    ->label('Токены')
+                    ->numeric()
+                    ->default(0)
+                    ->minValue(0),
             ]);
     }
 
@@ -65,6 +73,15 @@ class UserResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('tokens')
+                    ->label('Токены')
+                    ->sortable()
+                    ->badge()
+                    ->color(fn (int $state): string => match(true) {
+                        $state >= 100 => 'success',
+                        $state >= 10 => 'warning',
+                        default => 'danger',
+                    }),
                 Tables\Columns\TextColumn::make('email_verified_at')
                     ->dateTime()
                     ->sortable(),
@@ -81,6 +98,34 @@ class UserResource extends Resource
                 //
             ])
             ->actions([
+                Tables\Actions\Action::make('addTokens')
+                    ->label('Токены')
+                    ->icon('heroicon-o-plus-circle')
+                    ->color('success')
+                    ->form([
+                        Forms\Components\TextInput::make('amount')
+                            ->label('Количество токенов')
+                            ->numeric()
+                            ->required()
+                            ->default(10)
+                            ->minValue(-1000)
+                            ->maxValue(10000)
+                            ->helperText('Положительное число - добавить, отрицательное - списать'),
+                    ])
+                    ->action(function (User $record, array $data): void {
+                        $record->tokens += $data['amount'];
+                        if ($record->tokens < 0) {
+                            $record->tokens = 0;
+                        }
+                        $record->save();
+
+                        $action = $data['amount'] >= 0 ? 'добавлено' : 'списано';
+                        Notification::make()
+                            ->title("Токены {$action}")
+                            ->body("Баланс пользователя: {$record->tokens} токенов")
+                            ->success()
+                            ->send();
+                    }),
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([
